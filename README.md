@@ -46,7 +46,3 @@ Watch mode for development:
 ```bash
 npm run dev
 ```
-
-## License
-
-MIT © [Renskursa](https://github.com/renskursa)
