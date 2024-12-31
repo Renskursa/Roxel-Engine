@@ -1,6 +1,6 @@
 # Roxel Engine
 
-A lightweight and modular voxel game engine built with modern JavaScript.
+A simple lightweight and modular voxel game built from scratch using JavaScript.
 
 ## Features
 
@@ -11,12 +11,6 @@ A lightweight and modular voxel game engine built with modern JavaScript.
 - Input management system
 - Scene management
 - Lighting system
-
-## Installation
-
-```bash
-npm install roxel-engine
-```
 
 ## Quick Start
 
