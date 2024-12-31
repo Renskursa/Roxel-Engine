@@ -1,0 +1,65 @@
+{
+  "name": "roxel-engine",
+  "version": "1.0.0",
+  "description": "A modular voxel game engine built with WebGL and gl-matrix",
+  "main": "dist/roxel-engine.js",
+  "module": "dist/roxel-engine.esm.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "prepare": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src",
+    "clean": "rimraf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/renskursa/roxel-engine.git"
+  },
+  "dependencies": {
+    "gl-matrix": "^3.4.3"
+  },
+  "peerDependencies": {
+    "gl-matrix": "^3.4.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/roxel-engine.esm.js",
+      "require": "./dist/roxel-engine.js"
+    }
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "rollup": "^4.9.0",
+    "typescript": "^5.3.3",
+    "tslib": "^2.6.2"
+  },
+  "keywords": [
+    "voxel",
+    "game",
+    "engine",
+    "webgl",
+    "3d",
+    "javascript"
+  ],
+  "author": "Renskursa",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/renskursa/roxel-engine/issues"
+  },
+  "homepage": "https://github.com/renskursa/roxel-engine#readme"
+}
