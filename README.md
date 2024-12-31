@@ -32,7 +32,7 @@ engine.start();
 
 Clone the repository:
 ```bash
-git clone https://github.com/yourusername/roxel-engine.git
+git clone https://github.com/Renskursa/Roxel-Engine.git
 cd roxel-engine
 npm install
 ```
@@ -49,4 +49,4 @@ npm run dev
 
 ## License
 
-MIT © [Renskursa](https://github.com/yourusername)
+MIT © [Renskursa](https://github.com/renskursa)

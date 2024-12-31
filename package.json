@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/renskursa/roxel-engine.git"
+    "url": "git+https://github.com/Renskursa/Roxel-Engine.git"
   },
   "dependencies": {
     "gl-matrix": "^3.4.3"
@@ -59,7 +59,7 @@
   "author": "Renskursa",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/renskursa/roxel-engine/issues"
+    "url": "https://github.com/Renskursa/Roxel-Engine/issues"
   },
-  "homepage": "https://github.com/renskursa/roxel-engine#readme"
+  "homepage": "https://github.com/Renskursa/Roxel-Engine#readme"
 }
