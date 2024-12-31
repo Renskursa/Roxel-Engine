@@ -8,18 +8,12 @@ export default {
         {
             file: 'dist/roxel-engine.js',
             format: 'umd',
-            name: 'RoxelEngine',
-            globals: {
-                three: 'THREE'
-            }
+            name: 'RoxelEngine'
         },
         {
             file: 'dist/roxel-engine.min.js',
             format: 'umd',
             name: 'RoxelEngine',
-            globals: {
-                three: 'THREE'
-            },
             plugins: [terser()]
         },
         {
@@ -27,10 +21,7 @@ export default {
             format: 'es'
         }
     ],
-    external: [
-        'three',
-        'three/examples/jsm/controls/OrbitControls'
-    ],
+    external: [],
     plugins: [
         resolve({
             preferBuiltins: false,
