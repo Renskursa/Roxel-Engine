@@ -6,19 +6,20 @@ export class Voxel {
      * @param {number} x - X position in world space
      * @param {number} y - Y position in world space
      * @param {number} z - Z position in world space
-     * @param {number} type - Type ID of the voxel (e.g., 0 for air, 1 for dirt, etc.)
-     * @param {number} groupId - Group ID of the voxel (optional)
+     * @param {number} type - Type ID of the voxel
+     * @param {object} properties - Optional properties for the voxel
      */
-    constructor(x, y, z, type, groupId = null) {
+    constructor(x, y, z, type, properties = null) {
         this.x = Math.floor(x);
         this.y = Math.floor(y);
         this.z = Math.floor(z);
         this.type = type;
         this.visible = true;
         this.light = 15;
-        this.groupId = groupId;
+        this.groupId = null;
         this.color = null;
         this.colorGradient = null;
+        this.properties = properties;
         this.visibleFaces = {
             front: true,
             back: true,
@@ -76,7 +77,14 @@ export class Voxel {
     }
 
     isSolid() {
+        if (this.properties) {
+            return this.properties.solid !== false;
+        }
         return this.type !== 0;
+    }
+
+    isTransparent() {
+        return this.properties ? this.properties.transparent : false;
     }
 
     clone() {
@@ -87,6 +95,29 @@ export class Voxel {
         if (this.color) {
             return this.color;
         }
+        if (this.properties && this.properties.color) {
+            const [r, g, b, a] = this.properties.color;
+            return [r/255, g/255, b/255, (a || 255)/255];
+        }
         return [1, 1, 1, 1];
+    }
+
+    getVariantColor(variant = 0) {
+        if (this.properties && this.properties.variants && this.properties.variants[variant]) {
+            const [r, g, b, a] = this.properties.variants[variant];
+            return [r/255, g/255, b/255, (a || 255)/255];
+        }
+        return this.getColor();
+    }
+
+    getSideGradient(face) {
+        if (this.properties && this.properties.sideGradient) {
+            const gradient = this.properties.sideGradient;
+            if (gradient[face]) {
+                const [r, g, b, a] = gradient[face];
+                return [r/255, g/255, b/255, (a || 255)/255];
+            }
+        }
+        return this.getColor();
     }
 }

@@ -1,7 +1,7 @@
 // Core Engine Components
 export { Roxel, GameObject } from './core/Roxel.js';
 export { Input } from './core/Input.js';
-export { Camera } from './core/Camera.js';
+export { Camera } from './components/Camera.js';
 export { WorldManager } from './core/WorldManager.js';
 export { Light, LightingSystem } from './core/Lighting.js';
 

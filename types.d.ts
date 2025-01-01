@@ -74,6 +74,9 @@ declare module 'roxel-engine' {
         render(scene: Scene, camera: Camera): void;
         createShaderProgram(vertexSource: string, fragmentSource: string): WebGLProgram;
         createBuffer(data: ArrayBuffer, target?: number): WebGLBuffer;
+        createFramebuffer(width: number, height: number): WebGLFramebuffer;
+        createDepthTexture(width: number, height: number): WebGLTexture;
+        setShadowMap(texture: WebGLTexture): void;
     }
 
     export class Voxel {
@@ -219,7 +222,10 @@ declare module 'roxel-engine' {
         direction: Vector3;
         color: number[];
         intensity: number;
+        shadowMap: WebGLTexture | null;
+        shadowMatrix: Matrix4;
         constructor(type?: 'directional' | 'point' | 'spot');
+        setShadowProjection(left: number, right: number, bottom: number, top: number, near: number, far: number): void;
     }
 
     export class LightingSystem {

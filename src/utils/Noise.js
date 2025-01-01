@@ -40,6 +40,22 @@ export class Noise {
         );
     }
 
+    octaveNoise2D(x, y, octaves, persistence) {
+        let total = 0;
+        let frequency = 1;
+        let amplitude = 1;
+        let maxValue = 0;
+
+        for (let i = 0; i < octaves; i++) {
+            total += this.noise2D(x * frequency, y * frequency) * amplitude;
+            maxValue += amplitude;
+            amplitude *= persistence;
+            frequency *= 2;
+        }
+
+        return total / maxValue;
+    }
+
     noise3D(x, y, z) {
         const X = Math.floor(x) & 255;
         const Y = Math.floor(y) & 255;

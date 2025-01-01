@@ -1,6 +1,3 @@
-import { Voxel } from './Voxel.js';
-import { VoxelMesh } from '../mesh/VoxelMesh.js';
-
 /**
  * Represents a chunk of voxels in 3D space
  */
@@ -18,6 +15,8 @@ export class Chunk {
         this.size = size;
         this.voxels = new Map();
         this.isDirty = true;
+        this.creationTime = performance.now();
+        this.hasInitializedAnimation = false;
     }
 
     setVoxel(x, y, z, voxel) {

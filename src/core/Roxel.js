@@ -1,9 +1,10 @@
 import { Scene } from '../scenes/Scene.js';
 import { Input } from './Input.js';
 import { WebGLRenderer } from '../renderer/WebGLRenderer.js';
-import { Camera } from './Camera.js';
+import { Camera } from '../components/Camera.js';
 import { WorldManager } from './WorldManager.js';
 import { Timing } from './Timing.js';
+import { Light, LightingSystem } from './Lighting.js'; // Add this import
 
 export class Roxel {
     constructor(canvasId) {
@@ -46,7 +47,10 @@ export class Roxel {
 
         this.renderTiming = new Timing(60);
         this.physicsTiming = new Timing(120);
+
         this.vsyncEnabled = true;
+
+        this.lastTime = 0;
 
         console.log('Roxel engine initialised: ', this);
     }
@@ -88,7 +92,7 @@ export class Roxel {
         return this.worldManager;
     }
 
-    setTargetFPS(fps) {
+    setGameFPS(fps) {
         this.renderTiming.setTargetFPS(fps);
         console.log(`Render FPS target set to ${fps}`);
     }
@@ -122,6 +126,13 @@ export class Roxel {
     _gameLoop(timestamp) {
         if (!this.isRunning) return;
 
+        // Calculate delta time in seconds
+        this.deltaTime = (timestamp - this.lastTime) / 1000;
+        this.lastTime = timestamp;
+
+        // Clamp delta time to prevent huge jumps
+        this.deltaTime = Math.min(this.deltaTime, 0.1);
+
         const renderDelta = this.renderTiming.update(timestamp);
         const physicsDelta = this.physicsTiming.update(timestamp);
 
@@ -152,9 +163,9 @@ export class Roxel {
         const deltaTime = renderDelta / 1000;
         
         this.gameObjects.forEach(obj => {
-            if (obj.earlyUpdate) obj.earlyUpdate(deltaTime);
-            if (obj.update) obj.update(deltaTime);
-            if (obj.lateUpdate) obj.lateUpdate(deltaTime);
+            if (obj.earlyUpdate) obj.earlyUpdate(this.deltaTime);
+            if (obj.update) obj.update(this.deltaTime);
+            if (obj.lateUpdate) obj.lateUpdate(this.deltaTime);
         });
 
         Input.update();
@@ -257,6 +268,60 @@ export class Roxel {
     
     set worldManager(manager) {
         this._worldManager = manager;
+    }
+
+    createGameObject(options = {}) {
+        const obj = new GameObject();
+        
+        // Apply any provided options
+        Object.assign(obj, options);
+        
+        obj.engine = this;
+        this.gameObjects.add(obj);
+        
+        return obj;
+    }
+
+    createLight(type = 'directional', options = {}) {
+        const light = new Light(type);
+        
+        // Apply any provided options
+        Object.assign(light, options);
+        
+        if (!this.lightingSystem) {
+            this.lightingSystem = new LightingSystem();
+            this.renderer.setLightingSystem(this.lightingSystem);
+        }
+        
+        this.lightingSystem.addLight(light);
+        return light;
+    }
+
+    setDefaultShadowConfig(config) {
+        Object.assign(this.renderer.defaultShadowConfig, config);
+    }
+
+    // Add performance monitoring
+    getStats() {
+        return {
+            renderer: this.renderer.stats,
+            fps: this.renderTiming.getCurrentFPS(),
+            frameTime: this.renderTiming.getAverageFrameTime(),
+            objects: this.gameObjects.size
+        };
+    }
+
+    getDeltaTime() {
+        return this.deltaTime;
+    }
+
+    getScaledDeltaTime() {
+        return this.renderTiming.getScaledDelta();
+    }
+
+    setTimeScale(scale) {
+        this.renderTiming.setTimeScale(scale);
+        this.physicsTiming.setTimeScale(scale);
     }
 }
 

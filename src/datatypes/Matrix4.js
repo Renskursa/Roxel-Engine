@@ -106,4 +106,60 @@ export class Matrix4 {
         
         return this.multiply(m);
     }
+
+    ortho(left, right, bottom, top, near, far) {
+        const rl = 1 / (right - left);
+        const tb = 1 / (top - bottom);
+        const fn = 1 / (far - near);
+
+        this.elements = new Float32Array([
+            2 * rl, 0, 0, 0,
+            0, 2 * tb, 0, 0,
+            0, 0, -2 * fn, 0,
+            -(right + left) * rl, -(top + bottom) * tb, -(far + near) * fn, 1
+        ]);
+
+        return this;
+    }
+
+    lookAt(eye, target, up) {
+        const z = this.normalize(this.subtract(eye, target));
+        const x = this.normalize(this.cross(up, z));
+        const y = this.cross(z, x);
+
+        this.elements = new Float32Array([
+            x.x, y.x, z.x, 0,
+            x.y, y.y, z.y, 0,
+            x.z, y.z, z.z, 0,
+            -this.dot(x, eye), -this.dot(y, eye), -this.dot(z, eye), 1
+        ]);
+
+        return this;
+    }
+
+    normalize(v) {
+        const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        return { x: v.x / len, y: v.y / len, z: v.z / len };
+    }
+
+    subtract(a, b) {
+        return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+    }
+
+    cross(a, b) {
+        return {
+            x: a.y * b.z - a.z * b.y,
+            y: a.z * b.x - a.x * b.z,
+            z: a.x * b.y - a.y * b.x
+        };
+    }
+
+    dot(a, b) {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+
+    copy(other) {
+        this.elements = new Float32Array(other.elements);
+        return this;
+    }
 }

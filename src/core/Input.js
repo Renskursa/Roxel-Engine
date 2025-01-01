@@ -7,6 +7,8 @@ export class Input {
     
     static #mousePosition = { x: 0, y: 0 };
     static #mouseMotion = { x: 0, y: 0 };
+    static #lastMousePosition = { x: 0, y: 0 };
+    static #mouseMoveEvents = [];
     static #mouseWheel = 0;
     
     static MOUSE_BUTTON_LEFT = 1;
@@ -34,9 +36,17 @@ export class Input {
 
         window.addEventListener('mousemove', (e) => {
             e.preventDefault();
+            
+            this.#mouseMoveEvents.push({
+                movementX: e.movementX || 0,
+                movementY: e.movementY || 0
+            });
+
+            if (this.#mouseMoveEvents.length > 10) {
+                this.#mouseMoveEvents.shift();
+            }
+
             this.#mousePosition = { x: e.clientX, y: e.clientY };
-            this.#mouseMotion.x += e.movementX || 0;
-            this.#mouseMotion.y += e.movementY || 0;
         });
 
         window.addEventListener('mousedown', (e) => {
@@ -62,6 +72,22 @@ export class Input {
     static update() {
         this.#previousKeys = new Map(this.#currentKeys);
         this.#justPressedKeys.clear();
+
+        let totalX = 0;
+        let totalY = 0;
+        
+        this.#mouseMoveEvents.forEach(event => {
+            totalX += event.movementX;
+            totalY += event.movementY;
+        });
+
+        this.#mouseMotion = { 
+            x: Math.min(Math.max(totalX, -100), 100),
+            y: Math.min(Math.max(totalY, -100), 100)
+        };
+        this.#mouseMoveEvents = [];
+        
+        this.#lastMousePosition = { ...this.#mousePosition };
     }
 
     static isPressed(input) {
