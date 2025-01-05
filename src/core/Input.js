@@ -1,174 +1,209 @@
+import { KeyCode, InputAxis } from './InputSystem.js';
+
 export class Input {
-    static #actions = new Map();
-    static #axisValues = new Map();
-    static #currentKeys = new Map();
-    static #previousKeys = new Map();
-    static #justPressedKeys = new Set();
-    
-    static #mousePosition = { x: 0, y: 0 };
-    static #mouseMotion = { x: 0, y: 0 };
-    static #lastMousePosition = { x: 0, y: 0 };
-    static #mouseMoveEvents = [];
-    static #mouseWheel = 0;
-    
-    static MOUSE_BUTTON_LEFT = 1;
-    static MOUSE_BUTTON_RIGHT = 2;
-    static MOUSE_BUTTON_MIDDLE = 3;
-    
-    static initialize() {
-        this.#actions.clear();
-        this.#currentKeys.clear();
-        this.#previousKeys.clear();
-        this.#justPressedKeys.clear();
-
-        window.addEventListener('keydown', (e) => {
-            e.preventDefault();
-            if (!this.#currentKeys.get(e.code)) {
-                this.#currentKeys.set(e.code, true);
-                this.#justPressedKeys.add(e.code);
-            }
-        });
-
-        window.addEventListener('keyup', (e) => {
-            e.preventDefault();
-            this.#currentKeys.set(e.code, false);
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            e.preventDefault();
-            
-            this.#mouseMoveEvents.push({
-                movementX: e.movementX || 0,
-                movementY: e.movementY || 0
-            });
-
-            if (this.#mouseMoveEvents.length > 10) {
-                this.#mouseMoveEvents.shift();
-            }
-
-            this.#mousePosition = { x: e.clientX, y: e.clientY };
-        });
-
-        window.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            const button = `MouseButton${e.button}`;
-            this.#currentKeys.set(button, true);
-        });
-
-        window.addEventListener('mouseup', (e) => {
-            e.preventDefault();
-            const button = `MouseButton${e.button}`;
-            this.#currentKeys.set(button, false);
-        });
-
-        window.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            this.#mouseWheel += e.deltaY;
-        }, { passive: false });
-
-        this.setupDefaultBindings();
+    constructor() {
+        this.actions = new Map();
+        this.axisValues = new Map();
+        this.currentKeys = new Map();
+        this.previousKeys = new Map();
+        this.justPressedKeys = new Set();
+        this.keysPressedThisFrame = new Set();
+        this.mousePosition = { x: 0, y: 0 };
+        this.mouseMotion = { x: 0, y: 0 };
+        this.mouseMoveEvents = [];
+        this.mouseWheel = 0;
     }
 
-    static update() {
-        this.#previousKeys = new Map(this.#currentKeys);
-        this.#justPressedKeys.clear();
+    initialize() {
+        this.setupEventListeners();
+        this.setupDefaultInputMap();
+    }
 
-        let totalX = 0;
-        let totalY = 0;
+    setupEventListeners() {
+        // Keyboard events
+        window.addEventListener('keydown', this.handleKeyDown.bind(this), false);
+        window.addEventListener('keyup', this.handleKeyUp.bind(this), false);
         
-        this.#mouseMoveEvents.forEach(event => {
+        // Mouse events
+        window.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
+        window.addEventListener('mousedown', this.handleMouseDown.bind(this), false);
+        window.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
+        window.addEventListener('wheel', this.handleMouseWheel.bind(this), { passive: false });
+        
+        // Context menu
+        window.addEventListener('contextmenu', e => e.preventDefault());
+    }
+
+    handleKeyDown(e) {
+        e.preventDefault();
+        if (!this.currentKeys.get(e.code)) {
+            this.currentKeys.set(e.code, true);
+            this.keysPressedThisFrame.add(e.code);
+        }
+    }
+
+    handleKeyUp(e) {
+        e.preventDefault();
+        this.currentKeys.set(e.code, false);
+    }
+
+    handleMouseMove(e) {
+        e.preventDefault();
+        this.mouseMoveEvents.push({
+            movementX: e.movementX || 0,
+            movementY: e.movementY || 0
+        });
+    }
+
+    handleMouseDown(e) {
+        e.preventDefault();
+        const button = `MouseButton${e.button}`;
+        this.currentKeys.set(button, true);
+    }
+
+    handleMouseUp(e) {
+        e.preventDefault();
+        const button = `MouseButton${e.button}`;
+        this.currentKeys.set(button, false);
+    }
+
+    handleMouseWheel(e) {
+        e.preventDefault();
+        this.mouseWheel = -Math.sign(e.deltaY); // Normalize to -1, 0, or 1
+    }
+
+    update() {
+        // 1. Store previous state
+        this.previousKeys = new Map(this.currentKeys);
+        
+        // 2. Update pressed keys
+        this.justPressedKeys = new Set(this.keysPressedThisFrame);
+        this.keysPressedThisFrame.clear();
+        
+        // 3. Process mouse
+        this.processMouseMovement();
+        
+        // 4. Update axes
+        this.updateAxes();
+    }
+
+    // Core input methods
+    getKey(keyCode) { return this.currentKeys.get(keyCode) || false; }
+    getKeyDown(keyCode) { return this.justPressedKeys.has(keyCode); }
+    getKeyUp(keyCode) { return !this.currentKeys.get(keyCode) && this.previousKeys.get(keyCode); }
+    
+    // Action methods
+    isActionPressed(name) {
+        const keys = this.actions.get(name);
+        return keys ? keys.some(key => this.getKeyDown(key)) : false;
+    }
+
+    isActionHeld(name) {
+        const keys = this.actions.get(name);
+        return keys ? keys.some(key => this.getKey(key)) : false;
+    }
+
+    getAxis(axisName) {
+        const axis = this.axisValues.get(axisName);
+        return axis ? axis.value : 0;
+    }
+
+    getAxisRaw(axisName) {
+        const axis = this.axisValues.get(axisName);
+        return axis ? Math.sign(axis.value) : 0;
+    }
+
+    addAxis(name, positiveKey, negativeKey) {
+        this.axisValues.set(name, {
+            positive: positiveKey,
+            negative: negativeKey,
+            value: 0
+        });
+    }
+
+    updateAxes() {
+        for (const [name, axis] of this.axisValues) {
+            let value = 0;
+            
+            // For keyboard input
+            if (this.getKey(axis.positive)) value += 1;
+            if (this.getKey(axis.negative)) value -= 1;
+            
+            // For special axes like mouse
+            if (name === InputAxis.MouseX) {
+                value = this.mouseMotion.x;
+            } else if (name === InputAxis.MouseY) {
+                value = this.mouseMotion.y;
+            } else if (name === InputAxis.MouseScrollWheel) {
+                value = this.mouseWheel;
+            }
+            
+            // Update the axis value
+            axis.value = value;
+        }
+    }
+
+    clearActions() {
+        this.actions.clear();
+        this.axisValues.clear();
+    }
+
+    setupDefaultInputMap() {
+        // Clear existing bindings
+        this.clearActions();
+
+        // Set up Unity-like input axes
+        this.addAxis(InputAxis.Horizontal, KeyCode.D, KeyCode.A);
+        this.addAxis(InputAxis.Vertical, KeyCode.W, KeyCode.S);
+        
+        // Add common action mappings
+        this.addAction('move_forward', [KeyCode.W, KeyCode.UpArrow]);
+        this.addAction('move_backward', [KeyCode.S, KeyCode.DownArrow]);
+        this.addAction('move_left', [KeyCode.A, KeyCode.LeftArrow]);
+        this.addAction('move_right', [KeyCode.D, KeyCode.RightArrow]);
+        this.addAction('jump', [KeyCode.Space]);
+        this.addAction('sprint', [KeyCode.LeftShift]);
+        this.addAction('crouch', [KeyCode.LeftControl]);
+        this.addAction('interact', [KeyCode.E]);
+        this.addAction('toggle_vsync', [KeyCode.F2]);
+        this.addAction('toggle_wireframe', [KeyCode.F1]);
+    }
+
+    processMouseMovement() {
+        let totalX = 0, totalY = 0;
+        this.mouseMoveEvents.forEach(event => {
             totalX += event.movementX;
             totalY += event.movementY;
         });
-
-        this.#mouseMotion = { 
+        
+        this.mouseMotion = {
             x: Math.min(Math.max(totalX, -100), 100),
             y: Math.min(Math.max(totalY, -100), 100)
         };
-        this.#mouseMoveEvents = [];
-        
-        this.#lastMousePosition = { ...this.#mousePosition };
+        this.mouseMoveEvents = [];
     }
 
-    static isPressed(input) {
-        return this.#currentKeys.get(input) || false;
+    addAction(name, keys) {
+        if (!Array.isArray(keys)) {
+            keys = [keys];
+        }
+        this.actions.set(name, keys);
     }
 
-    static isJustPressed(input) {
-        return this.#justPressedKeys.has(input);
-    }
-
-    static isJustReleased(input) {
-        return !this.#currentKeys.get(input) && this.#previousKeys.get(input);
-    }
-
-    static addAction(name, inputs) {
-        this.#actions.set(name, inputs);
-    }
-
-    static addAxis(name, positiveAction, negativeAction) {
-        this.#axisValues.set(name, { positive: positiveAction, negative: negativeAction });
-    }
-
-    static clearActions() {
-        this.#actions.clear();
-        this.#axisValues.clear();
-    }
-
-    static isActionPressed(action) {
-        const inputs = this.#actions.get(action);
-        if (!inputs) return false;
-        return inputs.some(input => this.isJustPressed(input));
-    }
-
-    static isActionHeld(action) {
-        const inputs = this.#actions.get(action);
-        if (!inputs) return false;
-        return inputs.some(input => this.isPressed(input));
-    }
-
-    static isActionReleased(action) {
-        const inputs = this.#actions.get(action);
-        if (!inputs) return false;
-        return inputs.some(input => this.isJustReleased(input));
-    }
-
-    static getMousePosition() {
-        return { ...this.#mousePosition };
-    }
-
-    static getMouseMotion() {
-        const motion = { ...this.#mouseMotion };
-        this.#mouseMotion = { x: 0, y: 0 };
+    getMouseMotion() {
+        // Return and reset mouse motion in one go
+        const motion = { 
+            x: this.mouseMotion.x,
+            y: this.mouseMotion.y
+        };
+        // Reset after reading to prevent motion from persisting
+        this.mouseMotion = { x: 0, y: 0 };
         return motion;
     }
 
-    static getMouseWheelDelta() {
-        const delta = this.#mouseWheel;
-        this.#mouseWheel = 0;
-        return delta;
-    }
-
-    static getAxisValue(axisName) {
-        const axis = this.#axisValues.get(axisName);
-        if (!axis) return 0;
-        
-        let value = 0;
-        if (this.isActionHeld(axis.positive)) value += 1;
-        if (this.isActionHeld(axis.negative)) value -= 1;
+    getMouseWheelDelta() {
+        const value = this.mouseWheel;
+        this.mouseWheel = 0; // Reset after reading
         return value;
-    }
-
-    static setupDefaultBindings() {
-        this.addAction('move_forward', ['KeyW', 'ArrowUp']);
-        this.addAction('move_backward', ['KeyS', 'ArrowDown']);
-        this.addAction('move_left', ['KeyA', 'ArrowLeft']);
-        this.addAction('move_right', ['KeyD', 'ArrowRight']);
-        this.addAction('jump', ['Space']);
-        this.addAction('crouch', ['ControlLeft']);
-        this.addAction('sprint', ['ShiftLeft']);
-
-        this.addAxis('vertical', 'move_forward', 'move_backward');
-        this.addAxis('horizontal', 'move_right', 'move_left');
     }
 }

@@ -21,19 +21,22 @@ export class SceneLoader {
                 throw new Error(`Scene '${name}' not found in registry`);
             }
 
+            // End current scene if exists
             if (this.currentScene) {
-                await this.currentScene.unload();
+                await this.currentScene.onSceneEnd();
+                await this.currentScene.onSceneUnload();
                 this.engine.clear();
             }
 
             const newScene = new SceneClass();
             newScene.engine = this.engine;
             
-            await newScene.load();
-            
+            // Use scene-specific lifecycle methods
+            await newScene.onSceneLoad();
             this.currentScene = newScene;
-            
-            await this.currentScene.awake();
+            // Set the active scene in the engine
+            this.engine.activeScene = this.currentScene;
+            await this.currentScene.onSceneStart();
             
             console.log(`Scene '${name}' loaded successfully`);
         } catch (error) {

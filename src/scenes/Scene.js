@@ -1,14 +1,18 @@
 export class Scene {
     constructor() {
         this.children = [];
-        this.objects = [];
+        this.voxels = [];
         this.engine = null;
     }
 
     add(object) {
-        if (!this.children.includes(object)) {
+        if (object.generateRenderData) {
+            if (!this.voxels.includes(object)) {
+                this.voxels.push(object);
+                return true;
+            }
+        } else if (!this.children.includes(object)) {
             this.children.push(object);
-            this.objects.push(object);
             return true;
         }
         return false;
@@ -16,31 +20,50 @@ export class Scene {
 
     remove(object) {
         const childIndex = this.children.indexOf(object);
-        const objectIndex = this.objects.indexOf(object);
+        const voxelIndex = this.voxels.indexOf(object);
         
         if (childIndex !== -1) {
             this.children.splice(childIndex, 1);
         }
-        if (objectIndex !== -1) {
-            this.objects.splice(objectIndex, 1);
+        if (voxelIndex !== -1) {
+            this.voxels.splice(voxelIndex, 1);
         }
     }
 
     clear() {
         this.children = [];
-        this.objects = [];
+        this.voxels = [];
     }
 
-    async load() {
-    }
+    // Scene-specific lifecycle methods only
+    async onSceneLoad() {}
 
-    async unload() {
+    async onSceneUnload() {
         this.clear();
     }
 
-    awake() {
+    onSceneStart() {}
+
+    onSceneEnd() {}
+
+    update(deltaTime) {
+        // Update all game objects in the scene
+        this.children.forEach(obj => {
+            if (obj.update) obj.update(deltaTime);
+        });
+        
+        // Update voxels that need regeneration
+        this.voxels.forEach(voxel => {
+            if (voxel && voxel._isDirty) {
+                voxel.generateRenderData();
+            }
+        });
     }
 
-    update() {
+    generateRenderData() {
+        return {
+            children: this.children,
+            voxels: this.voxels
+        };
     }
 }

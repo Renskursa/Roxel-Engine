@@ -1,32 +1,10 @@
-import { VoxelMesh } from '../mesh/VoxelMesh.js';
-
 export class WorldManager {
-    constructor(renderer = null) {
-        this.chunks = new Map();
-        this.objects = new Map();
+    constructor() {
+        this.objectPositions = new Map();
         this.chunkSize = 16;
-        this.renderer = renderer;
     }
 
-    getChunk(chunkX, chunkY, chunkZ) {
-        const key = `${chunkX},${chunkY},${chunkZ}`;
-        return this.chunks.get(key);
-    }
-
-    addChunk(chunk) {
-        const key = `${chunk.x},${chunk.y},${chunk.z}`;
-        this.chunks.set(key, chunk);
-    }
-
-    getVoxel(worldX, worldY, worldZ) {
-        const chunkCoords = this.worldToChunkCoords(worldX, worldY, worldZ);
-        const chunk = this.getChunk(chunkCoords.x, chunkCoords.y, chunkCoords.z);
-        if (!chunk) return null;
-
-        const localCoords = this.worldToLocalCoords(worldX, worldY, worldZ);
-        return chunk.getVoxel(localCoords.x, localCoords.y, localCoords.z);
-    }
-
+    // Core position conversion methods
     worldToChunkCoords(worldX, worldY, worldZ) {
         return {
             x: Math.floor(worldX / this.chunkSize),
@@ -43,60 +21,76 @@ export class WorldManager {
         };
     }
 
-    updateChunkVisibility() {
-        this.chunks.forEach(chunk => {
-            const neighbors = {
-                front: this.getChunk(chunk.x, chunk.y, chunk.z - 1),
-                back: this.getChunk(chunk.x, chunk.y, chunk.z + 1),
-                top: this.getChunk(chunk.x, chunk.y + 1, chunk.z),
-                bottom: this.getChunk(chunk.x, chunk.y - 1, chunk.z),
-                right: this.getChunk(chunk.x + 1, chunk.y, chunk.z),
-                left: this.getChunk(chunk.x - 1, chunk.y, chunk.z)
-            };
-
-            chunk.updateVoxelVisibility(neighbors);
-        });
-    }
-
-    localToWorldCoords(x, y, z) {
+    localToWorldCoords(chunkX, chunkY, chunkZ, localX, localY, localZ) {
         return {
-            worldX: x,
-            worldY: y,
-            worldZ: z
+            x: chunkX * this.chunkSize + localX,
+            y: chunkY * this.chunkSize + localY,
+            z: chunkZ * this.chunkSize + localZ
         };
     }
 
-    getObjectAt(worldX, worldY, worldZ) {
-        const key = `${worldX},${worldY},${worldZ}`;
-        return this.objects.get(key);
+    // Object position tracking
+    trackObject(obj) {
+        this.objectPositions.set(obj.id, { ...obj.position });
     }
 
-    setObjectAt(worldX, worldY, worldZ, object) {
-        const key = `${worldX},${worldY},${worldZ}`;
-        this.objects.set(key, object);
-        return true;
+    untrackObject(obj) {
+        this.objectPositions.delete(obj.id);
     }
 
-    setRenderer(renderer) {
-        this.renderer = renderer;
-    }
-
-    getCombinedMesh(chunks = null) {
-        if (!this.renderer) {
-            throw new Error('Renderer not set in WorldManager');
+    updatePosition(obj) {
+        if (this.objectPositions.has(obj.id)) {
+            this.objectPositions.set(obj.id, { ...obj.position });
         }
-        
-        const combinedMesh = new VoxelMesh(this.renderer);
-        
-        const chunksToProcess = chunks || this.chunks;
-        chunksToProcess.forEach(chunk => {
-            chunk.voxels.forEach(voxel => {
-                if (voxel.visible) {
-                    combinedMesh.addVoxel(voxel);
-                }
-            });
+    }
+
+    getPosition(obj) {
+        return this.objectPositions.get(obj.id) || null;
+    }
+
+    // Spatial queries
+    findInRadius(center, radius) {
+        const found = [];
+        this.objectPositions.forEach((pos, id) => {
+            if (this.getDistance(center, pos) <= radius) {
+                found.push(id);
+            }
         });
-        
-        return combinedMesh.build();
+        return found;
+    }
+
+    findInBox(min, max) {
+        return Array.from(this.objectPositions.entries())
+            .filter(([_, pos]) => this.isInBox(pos, min, max))
+            .map(([id]) => id);
+    }
+
+    findNearest(point, maxDist = Infinity) {
+        let nearest = null;
+        let minDist = maxDist;
+
+        this.objectPositions.forEach((pos, id) => {
+            const dist = this.getDistance(point, pos);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = id;
+            }
+        });
+
+        return nearest;
+    }
+
+    // Helper methods
+    getDistance(a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dz = a.z - b.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    isInBox(pos, min, max) {
+        return pos.x >= min.x && pos.x <= max.x &&
+               pos.y >= min.y && pos.y <= max.y &&
+               pos.z >= min.z && pos.z <= max.z;
     }
 }

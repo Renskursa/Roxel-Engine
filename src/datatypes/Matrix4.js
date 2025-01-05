@@ -43,6 +43,14 @@ export class Matrix4 {
         return this.multiply(m);
     }
 
+    scale(x, y, z) {
+        const m = new Matrix4();
+        m.elements[0] = x;
+        m.elements[5] = y;
+        m.elements[10] = z;
+        return this.multiply(m);
+    }
+
     static multiply(a, b) {
         const result = new Matrix4();
         const ae = a.elements;

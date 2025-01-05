@@ -1,496 +1,767 @@
-import { Matrix4 } from '../datatypes/Matrix4.js';
-import { RenderBatch } from './RenderBatch.js';
-
-// Add basic shadow shader sources as fallback
-const defaultShadowVertexShader = `#version 300 es
-in vec3 position;
-uniform mat4 lightSpaceMatrix;
-uniform mat4 modelMatrix;
-void main() {
-    gl_Position = lightSpaceMatrix * modelMatrix * vec4(position, 1.0);
-}`;
-
-const defaultShadowFragmentShader = `#version 300 es
-precision highp float;
-void main() {
-}`;
+import { CanvasManager } from './CanvasManager';
+import { Matrix4 } from '../datatypes/Matrix4';
+import { BatchManager } from './BatchManager';
+import { ShaderManager } from './ShaderManager';
+import { ChunkPool } from './ChunkPool';
+import { SkySystem } from '../systems/SkySystem';
 
 export class WebGLRenderer {
-    constructor(canvas) {
-        this.canvas = canvas;
-        // Optimize WebGL context creation for performance
-        this.gl = canvas.getContext('webgl2', {
-            antialias: false, // Disable for better performance
-            depth: true,      // Enable depth testing
-            stencil: false,   // Disable unused stencil buffer
-            alpha: false,     // Disable alpha for better performance
-            powerPreference: 'high-performance'
-        });
+    // Add cube vertices as static property
+    static CUBE_VERTICES = new Float32Array([
+        // Front face
+        -0.5, -0.5,  0.5,  // 0
+         0.5, -0.5,  0.5,  // 1
+         0.5,  0.5,  0.5,  // 2
+        -0.5,  0.5,  0.5,  // 3
         
-        if (!this.gl) {
-            throw new Error('WebGL2 not supported');
+        // Back face
+        -0.5, -0.5, -0.5,  // 4
+        -0.5,  0.5, -0.5,  // 5
+         0.5,  0.5, -0.5,  // 6
+         0.5, -0.5, -0.5,  // 7
+        
+        // Top face
+        -0.5,  0.5, -0.5,  // 8
+        -0.5,  0.5,  0.5,  // 9
+         0.5,  0.5,  0.5,  // 10
+         0.5,  0.5, -0.5,  // 11
+        
+        // Bottom face
+        -0.5, -0.5, -0.5,  // 12
+         0.5, -0.5, -0.5,  // 13
+         0.5, -0.5,  0.5,  // 14
+        -0.5, -0.5,  0.5,  // 15
+        
+        // Right face
+         0.5, -0.5, -0.5,  // 16
+         0.5,  0.5, -0.5,  // 17
+         0.5,  0.5,  0.5,  // 18
+         0.5, -0.5,  0.5,  // 19
+        
+        // Left face
+        -0.5, -0.5, -0.5,  // 20
+        -0.5, -0.5,  0.5,  // 21
+        -0.5,  0.5,  0.5,  // 22
+        -0.5,  0.5, -0.5   // 23
+    ]);
+
+    static CUBE_INDICES = new Uint16Array([
+        0,  2,  1,    0,  3,  2,   // front
+        4,  6,  5,    4,  7,  6,   // back
+        8,  10, 9,    8,  11, 10,  // top
+        12, 14, 13,   12, 15, 14,  // bottom
+        16, 18, 17,   16, 19, 18,  // right
+        20, 22, 21,   20, 23, 22   // left
+    ]);
+
+    // Add static normals property
+    static CUBE_NORMALS = new Float32Array([
+        // Front face
+         0.0,  0.0,  1.0,
+         0.0,  0.0,  1.0,
+         0.0,  0.0,  1.0,
+         0.0,  0.0,  1.0,
+        
+        // Back face
+         0.0,  0.0, -1.0,
+         0.0,  0.0, -1.0,
+         0.0,  0.0, -1.0,
+         0.0,  0.0, -1.0,
+        
+        // Top face
+         0.0,  1.0,  0.0,
+         0.0,  1.0,  0.0,
+         0.0,  1.0,  0.0,
+         0.0,  1.0,  0.0,
+        
+        // Bottom face
+         0.0, -1.0,  0.0,
+         0.0, -1.0,  0.0,
+         0.0, -1.0,  0.0,
+         0.0, -1.0,  0.0,
+        
+        // Right face
+         1.0,  0.0,  0.0,
+         1.0,  0.0,  0.0,
+         1.0,  0.0,  0.0,
+         1.0,  0.0,  0.0,
+        
+        // Left face
+        -1.0,  0.0,  0.0,
+        -1.0,  0.0,  0.0,
+        -1.0,  0.0,  0.0,
+        -1.0,  0.0,  0.0
+    ]);
+
+    // Add wireframe indices that only draw the edges
+    static WIREFRAME_INDICES = new Uint16Array([
+        // Front face edges
+        0, 1, 1, 2, 2, 3, 3, 0,
+        // Back face edges
+        4, 5, 5, 6, 6, 7, 7, 4,
+        // Connecting edges
+        0, 4, 1, 7, 2, 6, 3, 5
+    ]);
+
+  constructor(canvas = null) {
+    this.canvas = canvas || CanvasManager.createFullscreenCanvas();
+    this.gl = this.initWebGL2(this.canvas);
+    
+    if (!this.gl) {
+      throw new Error('WebGL 2 is not supported or failed to initialize');
+    }
+    
+    // Initialize matrices
+    this.projectionMatrix = new Matrix4();
+    this.viewMatrix = new Matrix4();
+    this.modelMatrix = new Matrix4();
+    
+    // Set up GL state
+    this.gl.enable(this.gl.CULL_FACE);
+    this.gl.cullFace(this.gl.FRONT);
+    this.gl.enable(this.gl.DEPTH_TEST);
+    this.gl.depthFunc(this.gl.LEQUAL);
+
+    // Remove extension checks since they're built into WebGL2
+    this.ext = {
+        depthTexture: true, // Built into WebGL2
+        ubo: true          // Built into WebGL2
+    };
+
+    // Initialize shader manager first
+    this.shaderManager = new ShaderManager(this.gl);
+    
+    // Create shared geometry AFTER shader initialization
+    this.initializeSharedGeometry();
+    
+    // Initialize remaining properties
+    this.batchManager = new BatchManager(this.gl);
+    this.maxBatchSize = 65536;
+    this.staticBuffers = new Map();
+    this.frustumMatrix = new Matrix4();
+    this.frustumPlanes = new Float32Array(24);
+    this.sharedUniforms = {
+        buffer: this.gl.createBuffer(),
+        data: new Float32Array(16 * 3)
+    };
+
+    // Adjust lighting for more subtle shadows
+    this.lightDirection = [1.5, -2.0, 0.5];
+    this.lightColor = [1.0, 1.0, 1.0];
+    this.ambientStrength = 0.5; // Increased ambient light to reduce contrast
+
+    // Add rendering configuration
+    this.config = {
+        enableAO: true,
+        enableLighting: true,
+        lightDirection: [0.5, -0.1, 0.5],
+        lightColor: [1.0, 1.0, 1.0],
+        ambientStrength: 0.5
+    };
+
+    // Add wireframe state
+    this.wireframeMode = false;
+
+    // Add wireframe buffer
+    this.wireframeBuffer = null;
+
+    // Add chunk pool
+    this.chunkPool = new ChunkPool();
+
+    // Add sky system
+    this.skySystem = new SkySystem();
+
+    // Set clear color to match void color initially
+    this.gl.clearColor(0.098, 0.098, 0.098, 1.0);
+
+    // Add instance batching configuration
+    this.maxInstancesPerBatch = 2048;
+    this.instanceDataStride = 8; // floats per instance (3 pos + 4 color + 1 ao)
+    this.instanceBufferSize = this.maxInstancesPerBatch * this.instanceDataStride;
+    
+    // Preallocate reusable instance data array
+    this.sharedInstanceData = new Float32Array(this.instanceBufferSize);
+
+    this.resize();
+  }
+
+  initWebGL2(canvas) {
+    let gl = null;
+    try {
+        gl = canvas.getContext('webgl2');
+        if (gl) {
+            // Enable wireframe mode support
+            this.wireframeSupported = true;
         }
-        
-        this.init();
-        this.wireframeMode = false;
-        this.lastProgram = null;
+    } catch(e) {
+        console.error('Error initializing WebGL2:', e);
+    }
+    return gl;
+  }
 
-        this.shadowMapSize = 2048;
-        this.shadowMapEnabled = true;
-        this.shadowFramebuffer = this.createFramebuffer(this.shadowMapSize, this.shadowMapSize);
-        this.shadowDepthTexture = this.createDepthTexture(this.shadowMapSize, this.shadowMapSize);
-        this.lightingSystem = null; // Add this line
-        
-        // Attach depth texture to framebuffer
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.shadowFramebuffer);
-        this.gl.framebufferTexture2D(this.gl.FRAMEBUFFER, this.gl.DEPTH_ATTACHMENT, this.gl.TEXTURE_2D, this.shadowDepthTexture, 0);
+  resize() {
+    const displayWidth = this.canvas.clientWidth;
+    const displayHeight = this.canvas.clientHeight;
 
-        // Use default shadow shaders if custom ones aren't provided
-        this.shadowShaderProgram = this.createShaderProgram(
-            defaultShadowVertexShader,
-            defaultShadowFragmentShader
-        );
+    if (this.canvas.width !== displayWidth || this.canvas.height !== displayHeight) {
+      this.canvas.width = displayWidth;
+      this.canvas.height = displayHeight;
+      this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
+    }
+  }
 
-        // Add automated resource management
-        this.resourceCache = new Map();
-        this.batchManager = new BatchManager(this.gl);
-        this.stats = {
-            drawCalls: 0,
-            triangles: 0,
-            vertices: 0
+  render(scene, camera) {
+    if (!scene || !camera) return;
+
+    const gl = this.gl;
+
+    // Update clear color based on camera height without fog
+    const height = camera.position.y;
+    let clearColor;
+    
+    if (height > 60) {
+        clearColor = this.skySystem.skyColor;
+    } else if (height < 0) {
+        clearColor = this.skySystem.voidColor;
+    } else {
+        const t = height / 60.0;  // Normalized height between 0 and 1
+        clearColor = {
+            r: this.lerp(this.skySystem.horizonColor.r, this.skySystem.skyColor.r, t),
+            g: this.lerp(this.skySystem.horizonColor.g, this.skySystem.skyColor.g, t),
+            b: this.lerp(this.skySystem.horizonColor.b, this.skySystem.skyColor.b, t),
+            a: 1.0
         };
-        
-        // Initialize default shadow mapping system
-        this.initializeShadowSystem();
+    }
+    
+    this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+
+    // Set polygon mode based on wireframe state
+    if (this.wireframeMode) {
+        gl.polygonMode?.(gl.FRONT_AND_BACK, gl.LINE);
+    } else {
+        gl.polygonMode?.(gl.FRONT_AND_BACK, gl.FILL);
     }
 
-    initializeShadowSystem() {
-        // ...existing shadow setup code...
-        this.defaultShadowConfig = {
-            size: 2048,
-            near: 1,
-            far: 512,
-            bias: 0.005,
-            softness: 2.0
-        };
+    // Use the shader program through ShaderManager
+    const program = this.shaderManager.use();
+
+    // Set up matrices using the program info from ShaderManager
+    camera.update();
+    const { uniforms } = program;
+
+    if (uniforms.uProjectionMatrix && camera.projectionMatrix) {
+        gl.uniformMatrix4fv(uniforms.uProjectionMatrix, false, camera.projectionMatrix.elements);
+    }
+    
+    if (uniforms.uViewMatrix && camera.viewMatrix) {
+        gl.uniformMatrix4fv(uniforms.uViewMatrix, false, camera.viewMatrix.elements);
     }
 
-    init() {
-        const gl = this.gl;
-        
-        gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.CULL_FACE);
-        gl.frontFace(gl.CCW);
-        gl.cullFace(gl.BACK);
-        gl.clearColor(0.1, 0.1, 0.1, 1.0);
-
-        gl.getExtension('EXT_color_buffer_float');
-        gl.getExtension('OES_texture_float_linear');
+    if (uniforms.uModelMatrix) {
+        this.modelMatrix.identity();
+        gl.uniformMatrix4fv(uniforms.uModelMatrix, false, this.modelMatrix.elements);
     }
 
-    setWireframeMode(enabled) {
-        this.wireframeMode = enabled;
-    }
+    // Clear previous batches
+    this.batchManager.clear();
 
-    clear() {
-        this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-    }
-
-    createShaderProgram(vertexSource, fragmentSource) {
-        const program = this.gl.createProgram();
-        const vertexShader = this.compileShader(vertexSource, this.gl.VERTEX_SHADER);
-        const fragmentShader = this.compileShader(fragmentSource, this.gl.FRAGMENT_SHADER);
-        
-        this.gl.attachShader(program, vertexShader);
-        this.gl.attachShader(program, fragmentShader);
-        this.gl.linkProgram(program);
-
-        if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-            throw new Error('Shader linking failed: ' + this.gl.getProgramInfoLog(program));
-        }
-
-        this.gl.deleteShader(vertexShader);
-        this.gl.deleteShader(fragmentShader);
-
-        return program;
-    }
-
-    compileShader(source, type) {
-        const shader = this.gl.createShader(type);
-        this.gl.shaderSource(shader, source);
-        this.gl.compileShader(shader);
-
-        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            throw new Error('Shader compilation error: ' + this.gl.getShaderInfoLog(shader));
-        }
-
-        return shader;
-    }
-
-    createBuffer(data, target = this.gl.ARRAY_BUFFER) {
-        const buffer = this.gl.createBuffer();
-        this.gl.bindBuffer(target, buffer);
-        this.gl.bufferData(target, data, this.gl.STATIC_DRAW);
-        return buffer;
-    }
-
-    createFramebuffer(width, height) {
-        const gl = this.gl;
-        const framebuffer = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-        return framebuffer;
-    }
-
-    createDepthTexture(width, height) {
-        const gl = this.gl;
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.DEPTH_COMPONENT24,
-            width,
-            height,
-            0,
-            gl.DEPTH_COMPONENT,
-            gl.UNSIGNED_INT,
-            null
-        );
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        return texture;
-    }
-
-    beginFrame() {
-        this.stats.drawCalls = 0;
-        this.stats.triangles = 0;
-        this.stats.vertices = 0;
-        this.batchManager.reset();
-    }
-
-    endFrame() {
-        this.batchManager.flush();
-    }
-
-    addToBatch(object) {
-        return this.batchManager.add(object);
-    }
-
-    getResource(key) {
-        return this.resourceCache.get(key);
-    }
-
-    setResource(key, resource) {
-        if (this.resourceCache.has(key)) {
-            this.deleteResource(key);
-        }
-        this.resourceCache.set(key, resource);
-    }
-
-    deleteResource(key) {
-        const resource = this.resourceCache.get(key);
-        if (resource) {
-            if (resource instanceof WebGLBuffer) {
-                this.gl.deleteBuffer(resource);
-            } else if (resource instanceof WebGLTexture) {
-                this.gl.deleteTexture(resource);
+    // Handle both voxels and regular objects
+    const renderObjects = [...(scene.voxels || []), ...(scene.children || [])];
+    
+    renderObjects.forEach(obj => {
+        if (obj?.visible) {
+            const renderData = obj.generateRenderData?.() || obj;
+            if (renderData && renderData.vertices?.length > 0) {
+                // Add default colors if not provided
+                if (!renderData.colors) {
+                    renderData.colors = new Float32Array(renderData.vertices.length / 3 * 4).fill(1.0);
+                }
+                this.batchManager.addToBatch(renderData);
             }
-            this.resourceCache.delete(key);
+        }
+    });
+
+    // Render all batches
+    for (const [materialId, batch] of this.batchManager.batches) {
+        const processedBatch = this.batchManager.processBatch(batch);
+        if (processedBatch.vertices.length > 0) {
+            this.renderBatch(processedBatch);
         }
     }
 
-    render(scene, camera) {
-        this.beginFrame();
+    // Update shared uniforms
+    this.updateSharedUniforms(camera);
+    
+    // Update frustum planes for culling
+    this.updateFrustumPlanes(camera);
 
-        if (this.shadowMapEnabled && this.lightingSystem?.lights[0]) {
-            // Render shadow map first
-            this.renderShadowMap(scene);
-        }
+    // Sort objects by material/shader to minimize state changes
+    const renderQueue = this.sortRenderQueue(scene);
 
-        this.clear();
-
-        const renderableObjects = scene.objects.filter(obj => obj.mesh && obj.material);
-        
-        // Sort objects by shader program to minimize state changes
-        renderableObjects.sort((a, b) => (a.material.program - b.material.program));
-
-        let currentProgram = null;
-
-        renderableObjects.forEach(object => {
-            if (!object.position) return;
-
-            if (object.material.program !== currentProgram) {
-                currentProgram = object.material.program;
-                this.gl.useProgram(currentProgram);
-                this.setupLighting(currentProgram);
-            }
-
-            this.renderObject(object, camera);
-
-            if (this.wireframeMode && object.mesh.edgeBuffer) {
-                this.renderWireframe(object, camera);
-            }
-        });
-
-        this.endFrame();
+    // Batch similar objects together
+    for (const batch of renderQueue) {
+        this.renderBatch(batch);
     }
+  }
 
-    renderShadowMap(scene) {
-        const gl = this.gl;
-        const light = this.lightingSystem.lights[0];
-        
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFramebuffer);
-        gl.viewport(0, 0, this.shadowMapSize, this.shadowMapSize);
-        gl.clear(gl.DEPTH_BUFFER_BIT);
-        
-        // Use shadow shader program and render scene from light's perspective
-        const renderableObjects = scene.objects.filter(obj => obj.mesh && obj.material);
-        
-        renderableObjects.forEach(object => {
-            if (!object.position) return;
-            this.renderObjectToShadowMap(object, light);
-        });
-        
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    }
+  renderBatch(batch) {
+    const gl = this.gl;
+    const { program, uniforms, instances } = batch;
 
-    renderObjectToShadowMap(object, light) {
-        const gl = this.gl;
-        gl.useProgram(this.shadowShaderProgram);
+    if (!instances || instances.length === 0) return;
 
-        this.setupAttribute(this.shadowShaderProgram, object.mesh.vertexBuffer, 'position', 3);
-
-        const modelMatrix = new Matrix4()
-            .translate(object.position.x, object.position.y, object.position.z)
-            .rotateX(object.rotation.x)
-            .rotateY(object.rotation.y)
-            .rotateZ(object.rotation.z);
-
-        this.setUniformMatrix(this.shadowShaderProgram, 'modelMatrix', modelMatrix);
-        this.setUniformMatrix(this.shadowShaderProgram, 'lightSpaceMatrix', light.shadowMatrix);
-
-        if (object.mesh.indexBuffer) {
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, object.mesh.indexBuffer);
-            gl.drawElements(gl.TRIANGLES, object.mesh.indexCount, gl.UNSIGNED_SHORT, 0);
-        } else {
-            gl.drawArrays(gl.TRIANGLES, 0, object.mesh.vertexCount);
-        }
-    }
-
-    setupLighting(program) {
-        if (!this.lightingSystem) return;
-
-        const gl = this.gl;
-        const mainLight = this.lightingSystem.lights[0] || {
-            direction: [0, -1, 0],
-            color: [1, 1, 1],
-            intensity: 1.0
-        };
-
-        // Normalize light direction for consistent lighting
-        const dir = mainLight.direction;
-        const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-        const normalizedDir = [dir.x / len, dir.y / len, dir.z / len];
-
-        const uniforms = {
-            lightDirection: gl.getUniformLocation(program, 'lightDirection'),
-            lightColor: gl.getUniformLocation(program, 'lightColor'),
-            lightIntensity: gl.getUniformLocation(program, 'lightIntensity'),
-            ambientLight: gl.getUniformLocation(program, 'ambientLight'),
-            cameraPosition: gl.getUniformLocation(program, 'cameraPosition')
-        };
-
-        if (uniforms.lightDirection) {
-            gl.uniform3fv(uniforms.lightDirection, new Float32Array(normalizedDir));
-        }
-        if (uniforms.lightColor) {
-            gl.uniform3fv(uniforms.lightColor, new Float32Array(mainLight.color));
-        }
-        if (uniforms.lightIntensity) {
-            gl.uniform1f(uniforms.lightIntensity, mainLight.intensity);
-        }
-        if (uniforms.ambientLight) {
-            gl.uniform3fv(uniforms.ambientLight, new Float32Array(this.lightingSystem.ambientLight.color));
-        }
-    }
-
-    renderObject(object, camera) {
-        const gl = this.gl;
-        const program = object.material?.program;
-        if (!program) return;
-        
+    try {
         gl.useProgram(program);
+        gl.bindVertexArray(this.sharedGeometry.vao);
 
-        // Set object-specific uniforms first
-        if (object.material.uniforms) {
-            for (const [name, uniform] of Object.entries(object.material.uniforms)) {
-                this.setUniform(program, name, uniform);
+        // Split instances into smaller batches
+        for (let i = 0; i < instances.length; i += this.maxInstancesPerBatch) {
+            const batchInstances = instances.slice(i, i + this.maxInstancesPerBatch);
+            const instanceCount = batchInstances.length;
+
+            // Reuse shared instance data array
+            let offset = 0;
+            for (const instance of batchInstances) {
+                // Position
+                this.sharedInstanceData[offset++] = instance.position[0];
+                this.sharedInstanceData[offset++] = instance.position[1];
+                this.sharedInstanceData[offset++] = instance.position[2];
+                
+                // Color
+                if (this.wireframeMode) {
+                    this.sharedInstanceData[offset++] = 1;
+                    this.sharedInstanceData[offset++] = 1;
+                    this.sharedInstanceData[offset++] = 1;
+                    this.sharedInstanceData[offset++] = 1;
+                } else {
+                    this.sharedInstanceData[offset++] = instance.color[0];
+                    this.sharedInstanceData[offset++] = instance.color[1];
+                    this.sharedInstanceData[offset++] = instance.color[2];
+                    this.sharedInstanceData[offset++] = instance.color[3];
+                }
+                
+                // AO
+                this.sharedInstanceData[offset++] = instance.ao || 1.0;
+            }
+
+            // Upload only the data we need
+            const usedData = new Float32Array(
+                this.sharedInstanceData.buffer,
+                0,
+                instanceCount * this.instanceDataStride
+            );
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.sharedGeometry.instanceBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, usedData, gl.DYNAMIC_DRAW);
+
+            if (this.wireframeMode) {
+                // Draw solid faces first (back faces only)
+                gl.enable(gl.CULL_FACE);
+                gl.cullFace(gl.FRONT);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sharedGeometry.indexBuffer);
+                gl.drawElementsInstanced(
+                    gl.TRIANGLES,
+                    this.sharedGeometry.count,
+                    gl.UNSIGNED_SHORT,
+                    0,
+                    instanceCount
+                );
+
+                // Then draw wireframe on top with depth test but no depth write
+                gl.depthMask(false);
+                gl.disable(gl.CULL_FACE);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sharedGeometry.wireframeBuffer);
+                gl.drawElementsInstanced(
+                    gl.LINES,
+                    this.sharedGeometry.wireframeCount,
+                    gl.UNSIGNED_SHORT,
+                    0,
+                    instanceCount
+                );
+                gl.depthMask(true);
+            } else {
+                // Normal solid rendering
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sharedGeometry.indexBuffer);
+                gl.drawElementsInstanced(
+                    gl.TRIANGLES,
+                    this.sharedGeometry.count,
+                    gl.UNSIGNED_SHORT,
+                    0,
+                    instanceCount
+                );
             }
         }
 
-        this.setupAttribute(program, object.mesh.vertexBuffer, 'position', 3);
-        this.setupAttribute(program, object.mesh.colorBuffer, 'color', 4);
-        this.setupAttribute(program, object.mesh.normalBuffer, 'normal', 3);
+    } catch (error) {
+        console.error('Error in renderBatch:', error);
+        throw error;
+    } finally {
+        // Restore states
+        gl.enable(gl.CULL_FACE);
+        gl.cullFace(gl.FRONT);
+        gl.depthMask(true);
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    }
+  }
 
-        const modelMatrix = new Matrix4()
-            .translate(object.position.x, object.position.y, object.position.z)
-            .rotateX(object.rotation.x)
-            .rotateY(object.rotation.y)
-            .rotateZ(object.rotation.z);
+  initializeSharedGeometry() {
+    const gl = this.gl;
+    const program = this.shaderManager.defaultProgram;
+    
+    if (!program || !program.attributes) {
+        throw new Error('Shader program not properly initialized');
+    }
 
-        const modelViewMatrix = camera.getViewMatrix().multiply(modelMatrix);
+    try {
+        // Create VAO using native WebGL2
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
 
-        this.setUniformMatrix(program, 'modelViewMatrix', modelViewMatrix);
-        this.setUniformMatrix(program, 'modelMatrix', modelMatrix);
-        this.setUniformMatrix(program, 'projectionMatrix', camera.getProjectionMatrix());
+        // 1. Setup vertex buffer with fixed stride and interleaved data
+        const vertexStride = 24; // 6 floats (3 for position, 3 for normal)
+        const vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        
+        // Interleave position and normal data
+        const interleavedData = new Float32Array(WebGLRenderer.CUBE_VERTICES.length * 2);
+        for (let i = 0; i < WebGLRenderer.CUBE_VERTICES.length; i += 3) {
+            const vertexIdx = (i / 3) * 6;
+            // Position
+            interleavedData[vertexIdx] = WebGLRenderer.CUBE_VERTICES[i];
+            interleavedData[vertexIdx + 1] = WebGLRenderer.CUBE_VERTICES[i + 1];
+            interleavedData[vertexIdx + 2] = WebGLRenderer.CUBE_VERTICES[i + 2];
+            // Normal
+            interleavedData[vertexIdx + 3] = WebGLRenderer.CUBE_NORMALS[i];
+            interleavedData[vertexIdx + 4] = WebGLRenderer.CUBE_NORMALS[i + 1];
+            interleavedData[vertexIdx + 5] = WebGLRenderer.CUBE_NORMALS[i + 2];
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, interleavedData, gl.STATIC_DRAW);
 
-        // Add shadow map binding
-        if (this.shadowMapEnabled && this.lightingSystem?.lights[0]) {
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, this.shadowDepthTexture);
-            gl.uniform1i(gl.getUniformLocation(program, 'shadowMap'), 0);
-            this.setUniformMatrix(program, 'lightSpaceMatrix', this.lightingSystem.lights[0].shadowMatrix);
+        // 2. Setup attributes with correct strides and offsets
+        const positionLoc = program.attributes.position;
+        const normalLoc = program.attributes.normal;
+        
+        if (positionLoc !== undefined) {
+            gl.enableVertexAttribArray(positionLoc);
+            gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, vertexStride, 0);
+        }
+        
+        if (normalLoc !== undefined) {
+            gl.enableVertexAttribArray(normalLoc);
+            gl.vertexAttribPointer(normalLoc, 3, gl.FLOAT, false, vertexStride, 12);
         }
 
-        if (object.mesh.indexBuffer) {
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, object.mesh.indexBuffer);
-            gl.drawElements(gl.TRIANGLES, object.mesh.indexCount, gl.UNSIGNED_SHORT, 0);
-        } else {
-            gl.drawArrays(gl.TRIANGLES, 0, object.mesh.vertexCount);
+        // 3. Setup instance buffer with correct size and stride
+        const instanceStride = 32; // 8 floats (3 pos + 4 color + 1 ao)
+        const instanceBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+        
+        // Allocate larger buffer for instances
+        const maxInstances = 10000; // Increase if needed
+        gl.bufferData(gl.ARRAY_BUFFER, maxInstances * instanceStride, gl.DYNAMIC_DRAW);
+
+        const instancePosLoc = program.attributes.instancePosition;
+        const instanceColorLoc = program.attributes.instanceColor;
+        const aoLoc = program.attributes.ao;
+
+        // Update instance attribute setup for WebGL2
+        if (instancePosLoc !== undefined) {
+            gl.enableVertexAttribArray(instancePosLoc);
+            gl.vertexAttribPointer(instancePosLoc, 3, gl.FLOAT, false, instanceStride, 0);
+            gl.vertexAttribDivisor(instancePosLoc, 1);  // Native instancing
+        }
+
+        if (instanceColorLoc !== undefined) {
+            gl.enableVertexAttribArray(instanceColorLoc);
+            gl.vertexAttribPointer(instanceColorLoc, 4, gl.FLOAT, false, instanceStride, 12);
+            gl.vertexAttribDivisor(instanceColorLoc, 1);
+        }
+
+        if (aoLoc !== undefined) {
+            gl.enableVertexAttribArray(aoLoc);
+            gl.vertexAttribPointer(aoLoc, 1, gl.FLOAT, false, instanceStride, 28);
+            gl.vertexAttribDivisor(aoLoc, 1);
+        }
+
+        // 4. Setup index buffer
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, WebGLRenderer.CUBE_INDICES, gl.STATIC_DRAW);
+
+        // Add wireframe index buffer
+        const wireframeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireframeBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, WebGLRenderer.WIREFRAME_INDICES, gl.STATIC_DRAW);
+
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+        this.sharedGeometry = {
+            vao,
+            vertexBuffer,
+            indexBuffer,
+            instanceBuffer,
+            count: WebGLRenderer.CUBE_INDICES.length,
+            maxInstances,
+            wireframeBuffer,
+            wireframeCount: WebGLRenderer.WIREFRAME_INDICES.length
+        };
+
+    } catch (error) {
+        console.error('Error in initializeSharedGeometry:', error);
+        throw error;
+    }
+  }
+
+  // Add cleanup method
+  dispose() {
+    const gl = this.gl;
+    for (const buffers of this.staticBuffers.values()) {
+        gl.deleteBuffer(buffers.vertex);
+        gl.deleteBuffer(buffers.color);
+        gl.deleteBuffer(buffers.index);
+    }
+    this.staticBuffers.clear();
+    this.chunkPool.cleanup();
+  }
+
+  updateSharedUniforms(camera) {
+    const gl = this.gl;
+    const uniforms = this.shaderManager.getCurrentProgram().uniforms;
+
+    // Update projection and view matrices
+    if (uniforms.uProjectionMatrix && camera.projectionMatrix) {
+        gl.uniformMatrix4fv(uniforms.uProjectionMatrix, false, camera.projectionMatrix.elements);
+    }
+    
+    if (uniforms.uViewMatrix && camera.viewMatrix) {
+        gl.uniformMatrix4fv(uniforms.uViewMatrix, false, camera.viewMatrix.elements);
+    }
+
+    // Update UBO if supported
+    if (this.ext.ubo) {
+        gl.bindBuffer(gl.UNIFORM_BUFFER, this.sharedUniforms.buffer);
+        this.sharedUniforms.data.set(camera.projectionMatrix.elements, 0);
+        this.sharedUniforms.data.set(camera.viewMatrix.elements, 16);
+        gl.bufferData(gl.UNIFORM_BUFFER, this.sharedUniforms.data, gl.DYNAMIC_DRAW);
+    }
+
+    // Add light direction uniform
+    if (uniforms.lightDirection) {
+        gl.uniform3fv(uniforms.lightDirection, [0.7, 1.0, 0.5]); // More pronounced angle
+    }
+
+    // Update lighting uniforms
+    if (uniforms.uLightDirection) {
+        gl.uniform3fv(uniforms.uLightDirection, this.lightDirection);
+    }
+    if (uniforms.uLightColor) {
+        gl.uniform3fv(uniforms.uLightColor, this.lightColor);
+    }
+    if (uniforms.uAmbientStrength) {
+        gl.uniform1f(uniforms.uAmbientStrength, this.ambientStrength);
+    }
+
+    // Update configuration uniforms
+    if (uniforms.uEnableAO) {
+        gl.uniform1i(uniforms.uEnableAO, this.config.enableAO);
+    }
+    if (uniforms.uEnableLighting) {
+        gl.uniform1i(uniforms.uEnableLighting, this.config.enableLighting);
+    }
+    if (this.config.enableLighting) {
+        if (uniforms.uLightDirection) {
+            gl.uniform3fv(uniforms.uLightDirection, this.config.lightDirection);
+        }
+        if (uniforms.uLightColor) {
+            gl.uniform3fv(uniforms.uLightColor, this.config.lightColor);
+        }
+        if (uniforms.uAmbientStrength) {
+            gl.uniform1f(uniforms.uAmbientStrength, this.config.ambientStrength);
         }
     }
 
-    setupAttribute(program, buffer, name, size) {
-        const gl = this.gl;
-        const location = gl.getAttribLocation(program, name);
-        if (location !== -1) {
-            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.enableVertexAttribArray(location);
-            gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0);
-        }
+    // Update sky uniforms
+    if (uniforms.uSkyColor) {
+        console.log(this.skySystem.skyColor);
+        gl.uniform4f(uniforms.uSkyColor, 
+            this.skySystem.skyColor.r,
+            this.skySystem.skyColor.g,
+            this.skySystem.skyColor.b,
+            this.skySystem.skyColor.a
+        );
+    }
+    
+    if (uniforms.uVoidColor) {
+        console.log(this.skySystem.voidColor);
+        gl.uniform4f(uniforms.uVoidColor,
+            this.skySystem.voidColor.r,
+            this.skySystem.voidColor.g,
+            this.skySystem.voidColor.b,
+            this.skySystem.voidColor.a
+        );
+    }
+    
+    if (uniforms.uHorizonColor) {
+        gl.uniform4f(uniforms.uHorizonColor,
+            this.skySystem.horizonColor.r,
+            this.skySystem.horizonColor.g,
+            this.skySystem.horizonColor.b,
+            this.skySystem.horizonColor.a
+        );
+    }
+    
+    if (uniforms.uFogColor) {
+        gl.uniform4f(uniforms.uFogColor,
+            this.skySystem.fogColor.r,
+            this.skySystem.fogColor.g,
+            this.skySystem.fogColor.b,
+            this.skySystem.fogColor.a
+        );
+    }
+    
+    if (uniforms.uFogDensity) {
+        gl.uniform1f(uniforms.uFogDensity, this.skySystem.fogDensity);
+    }
+    
+    if (uniforms.uFogStart) {
+        gl.uniform1f(uniforms.uFogStart, this.skySystem.fogStart);
+    }
+    
+    if (uniforms.uFogEnd) {
+        gl.uniform1f(uniforms.uFogEnd, this.skySystem.fogEnd);
     }
 
-    setUniformMatrix(program, name, matrix) {
-        const location = this.gl.getUniformLocation(program, name);
-        if (location) {
-            this.gl.uniformMatrix4fv(location, false, matrix.elements);
-        }
+    // Add fog enable uniform
+    if (uniforms.uEnableFog) {
+        gl.uniform1i(uniforms.uEnableFog, this.skySystem.enableFog);
     }
 
-    setUniform(program, name, value) {
-        const gl = this.gl;
-        const location = gl.getUniformLocation(program, name);
-        if (!location) return;
-
-        // Support for object-style uniforms
-        const actualValue = value?.value !== undefined ? value.value : value;
-
-        if (Array.isArray(actualValue)) {
-            switch (actualValue.length) {
-                case 2:
-                    gl.uniform2f(location, actualValue[0], actualValue[1]);
-                    break;
-                case 3:
-                    gl.uniform3f(location, actualValue[0], actualValue[1], actualValue[2]);
-                    break;
-                case 4:
-                    gl.uniform4f(location, actualValue[0], actualValue[1], actualValue[2], actualValue[3]);
-                    break;
-                case 16:
-                    gl.uniformMatrix4fv(location, false, actualValue);
-                    break;
-                default:
-                    console.warn(`Unsupported uniform array length: ${actualValue.length}`);
-            }
-        } else if (typeof actualValue === 'number') {
-            gl.uniform1f(location, actualValue);
-        } else if (typeof actualValue === 'boolean') {
-            gl.uniform1i(location, actualValue ? 1 : 0);
-        }
-    }
-
-    renderWireframe(object, camera) {
-        const gl = this.gl;
-
-        if (!this.wireframeShader) {
-            this.wireframeShader = this.createShaderProgram(
-                `#version 300 es
-                in vec3 position;
-                uniform mat4 modelViewMatrix;
-                uniform mat4 projectionMatrix;
-                void main() {
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }`,
-                `#version 300 es
-                precision mediump float;
-                out vec4 fragColor;
-                void main() {
-                    fragColor = vec4(1.0, 1.0, 1.0, 1.0);
-                }`
+    // Only update fog uniforms if fog is enabled
+    if (this.skySystem.enableFog) {
+        if (uniforms.uFogColor) {
+            gl.uniform4f(uniforms.uFogColor,
+                this.skySystem.fogColor.r,
+                this.skySystem.fogColor.g,
+                this.skySystem.fogColor.b,
+                this.skySystem.fogColor.a
             );
         }
-
-        gl.useProgram(this.wireframeShader);
-
-        const modelMatrix = new Matrix4()
-            .translate(object.position.x, object.position.y, object.position.z)
-            .rotateX(object.rotation.x)
-            .rotateY(object.rotation.y)
-            .rotateZ(object.rotation.z);
-
-        const modelViewMatrix = camera.getViewMatrix().multiply(modelMatrix);
-
-        this.setUniformMatrix(this.wireframeShader, 'modelViewMatrix', modelViewMatrix);
-        this.setUniformMatrix(this.wireframeShader, 'projectionMatrix', camera.getProjectionMatrix());
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, object.mesh.edgeBuffer);
-        const positionLoc = gl.getAttribLocation(this.wireframeShader, 'position');
-        gl.enableVertexAttribArray(positionLoc);
-        gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 0, 0);
-
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthFunc(gl.LEQUAL);
-        gl.lineWidth(1.0);
-        gl.drawArrays(gl.LINES, 0, object.mesh.edgeCount);
-        gl.depthFunc(gl.LESS);
-    }
-
-    setLightingSystem(lightingSystem) {  // Add this method
-        this.lightingSystem = lightingSystem;
-    }
-}
-
-class BatchManager {
-    constructor(gl) {
-        this.gl = gl;
-        this.batches = new Map();
-        this.maxBatchSize = 65536; // Adjust based on your needs
-    }
-
-    reset() {
-        this.batches.clear();
-    }
-
-    add(object) {
-        const key = this.getBatchKey(object);
-        let batch = this.batches.get(key);
         
-        if (!batch || batch.isFull()) {
-            batch = new RenderBatch(this.gl, this.maxBatchSize);
-            this.batches.set(key, batch);
+        if (uniforms.uFogDensity) {
+            gl.uniform1f(uniforms.uFogDensity, this.skySystem.fogDensity);
         }
-
-        return batch.add(object);
+        
+        if (uniforms.uFogStart) {
+            gl.uniform1f(uniforms.uFogStart, this.skySystem.fogStart);
+        }
+        
+        if (uniforms.uFogEnd) {
+            gl.uniform1f(uniforms.uFogEnd, this.skySystem.fogEnd);
+        }
     }
+  }
 
-    flush() {
-        this.batches.forEach(batch => batch.render());
-    }
+  updateFrustumPlanes(camera) {
+    // Compute view-projection matrix
+    this.frustumMatrix.multiply(camera.projectionMatrix, camera.viewMatrix);
+    
+    // Extract frustum planes
+    const m = this.frustumMatrix.elements;
+    
+    // Left plane
+    this.frustumPlanes[0] = m[3] + m[0];
+    this.frustumPlanes[1] = m[7] + m[4];
+    this.frustumPlanes[2] = m[11] + m[8];
+    this.frustumPlanes[3] = m[15] + m[12];
+    
+    // Right plane
+    this.frustumPlanes[4] = m[3] - m[0];
+    this.frustumPlanes[5] = m[7] - m[4];
+    this.frustumPlanes[6] = m[11] - m[8];
+    this.frustumPlanes[7] = m[15] - m[12];
+    
+    // Bottom plane
+    this.frustumPlanes[8] = m[3] + m[1];
+    this.frustumPlanes[9] = m[7] + m[5];
+    this.frustumPlanes[10] = m[11] + m[9];
+    this.frustumPlanes[11] = m[15] + m[13];
+    
+    // Top plane
+    this.frustumPlanes[12] = m[3] - m[1];
+    this.frustumPlanes[13] = m[7] - m[5];
+    this.frustumPlanes[14] = m[11] - m[9];
+    this.frustumPlanes[15] = m[15] - m[13];
+    
+    // Near plane
+    this.frustumPlanes[16] = m[3] + m[2];
+    this.frustumPlanes[17] = m[7] + m[6];
+    this.frustumPlanes[18] = m[11] + m[10];
+    this.frustumPlanes[19] = m[15] + m[14];
+    
+    // Far plane
+    this.frustumPlanes[20] = m[3] - m[2];
+    this.frustumPlanes[21] = m[7] - m[6];
+    this.frustumPlanes[22] = m[11] - m[10];
+    this.frustumPlanes[23] = m[15] - m[14];
+  }
 
-    getBatchKey(object) {
-        return `${object.material.program}_${object.material.texture || 'null'}`;
+  isCulled(position) {
+    // Quick frustum culling check
+    for (let i = 0; i < 24; i += 4) {
+        const distance = 
+            this.frustumPlanes[i] * position[0] +
+            this.frustumPlanes[i + 1] * position[1] +
+            this.frustumPlanes[i + 2] * position[2] +
+            this.frustumPlanes[i + 3];
+            
+        if (distance < -1.0) return true;
     }
+    return false;
+  }
+
+  sortRenderQueue(scene) {
+    const queue = new Map();
+    const objects = [...(scene.voxels || []), ...(scene.children || [])];
+    
+    for (const obj of objects) {
+        if (!obj?.visible) continue;
+        
+        const renderData = obj.generateRenderData?.();
+        if (!renderData?.instances?.length) continue;
+        
+        const key = obj.material?.id || 'default';
+        if (!queue.has(key)) {
+            // Use correct shader program based on material id
+            const program = this.shaderManager.getProgram(key);
+            queue.set(key, {
+                program: program.program,
+                uniforms: program.uniforms,
+                instances: []
+            });
+        }
+        
+        queue.get(key).instances.push(...renderData.instances);
+    }
+    
+    return Array.from(queue.values());
+  }
+
+  setWireframeMode(enabled) {
+    this.wireframeMode = enabled;
+    const gl = this.gl;
+
+    if (enabled) {
+        gl.lineWidth(1.0);
+    }
+  }
+
+  lerp(a, b, t) {
+    return a + (b - a) * Math.max(0, Math.min(1, t));
+  }
 }
