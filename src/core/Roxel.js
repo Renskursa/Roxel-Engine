@@ -81,8 +81,8 @@ export class Roxel {
         this.deltaTime = 0;
         
         // Chunk management settings
-        this.chunkLoadDistance = 8;
-        this.chunkUpdateInterval = 500;
+        this.chunkLoadDistance = 4;
+        this.chunkUpdateInterval = 1000;
         this.lastChunkUpdate = 0;
 
         this._gameLoop = this._gameLoop.bind(this);

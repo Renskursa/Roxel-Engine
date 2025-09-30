@@ -6,7 +6,8 @@ export class World {
         this.chunkSize = options.chunkSize || 16;
         this.chunkPool = new Map();
         this.generate = options.generate || function(x, y, z, noise) {
-            if (y < 0) {
+            // Create a simple flat world at y=0 with a few blocks
+            if (y === 0 && Math.abs(x) < 10 && Math.abs(z) < 10) {
                 return 1;
             }
             return 0;

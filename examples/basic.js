@@ -1,4 +1,4 @@
-import { Roxel } from '../dist/roxel-engine.esm.js';
+import { Roxel, Vector3 } from '../dist/roxel-engine.esm.js';
 
 // Create a new engine instance, attaching it to the canvas with id 'roxel-canvas'
 const engine = new Roxel('roxel-canvas');
@@ -10,27 +10,36 @@ engine.start();
 const camera = engine.camera;
 const input = engine.getInput();
 
+// Pre-allocate vectors to avoid memory leaks
+const forward = new Vector3();
+const right = new Vector3();
+const movement = new Vector3();
+
 engine.addGameObject({
     update: (deltaTime) => {
         const moveSpeed = 5 * deltaTime;
         const rotateSpeed = 2 * deltaTime;
 
-        // Basic movement
+        // Basic movement - reuse vectors to prevent memory leaks
         if (input.getKey('KeyW')) {
-            const forward = camera.getForwardVector();
-            camera.position.add(forward.multiplyScalar(moveSpeed));
+            camera.getForwardVector(forward);
+            movement.copy(forward).multiplyScalar(moveSpeed);
+            camera.position.add(movement);
         }
         if (input.getKey('KeyS')) {
-            const forward = camera.getForwardVector();
-            camera.position.subtract(forward.multiplyScalar(moveSpeed));
+            camera.getForwardVector(forward);
+            movement.copy(forward).multiplyScalar(-moveSpeed);
+            camera.position.add(movement);
         }
         if (input.getKey('KeyA')) {
-            const right = camera.getRightVector();
-            camera.position.subtract(right.multiplyScalar(moveSpeed));
+            camera.getRightVector(right);
+            movement.copy(right).multiplyScalar(-moveSpeed);
+            camera.position.add(movement);
         }
         if (input.getKey('KeyD')) {
-            const right = camera.getRightVector();
-            camera.position.add(right.multiplyScalar(moveSpeed));
+            camera.getRightVector(right);
+            movement.copy(right).multiplyScalar(moveSpeed);
+            camera.position.add(movement);
         }
         if (input.getKey('Space')) {
             camera.position.y += moveSpeed;
