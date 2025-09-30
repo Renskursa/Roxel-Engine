@@ -4,6 +4,8 @@ import { Camera } from './Camera.js';
 import { Timing } from './Timing.js';
 import { SceneLoader } from '../scenes/SceneLoader.js';
 import { Scene } from '../scenes/Scene.js';
+import { Component } from './Component.js';
+import { ChunkManager } from './ChunkManager.js';
 
 export class Roxel {
     #input;
@@ -12,6 +14,7 @@ export class Roxel {
     #vsyncEnabled;
     #focusManager;
     #sceneLoader;
+    #chunkManager;
 
     constructor(canvasId) {
         // Initialize core systems
@@ -74,16 +77,12 @@ export class Roxel {
 
     #initializeGameState() {
         this.activeScene = new Scene();
+        this.#chunkManager = new ChunkManager(this.activeScene.world, this.activeScene);
         this.gameObjects = new Set();
         this.isRunning = false;
         this.lastTime = 0;
         this.lastFrameTime = 0;
         this.deltaTime = 0;
-        
-        // Chunk management settings
-        this.chunkLoadDistance = 4;
-        this.chunkUpdateInterval = 1000;
-        this.lastChunkUpdate = 0;
 
         this._gameLoop = this._gameLoop.bind(this);
         this.#input.initialize();
@@ -114,7 +113,9 @@ export class Roxel {
         this.#input.update();
         this.#updateGameObjects();
         this.#sceneLoader.update();
-        this.#updateChunks(timestamp);
+        if (this.camera) {
+            this.#chunkManager.update(this.camera.position);
+        }
         
         // Render
         if (this.camera) {
@@ -141,7 +142,7 @@ export class Roxel {
         while (this.#physicsTiming.getAccumulatedTime() >= this.#physicsTiming.targetFrameTime && 
                physicsIterations < 5) {
             this.gameObjects.forEach(obj => {
-                obj.fixedUpdate?.(physicsScaledDelta);
+                obj.components.forEach(c => c.fixedUpdate?.(physicsScaledDelta));
             });
             this.#physicsTiming.consumeAccumulatedTime(this.#physicsTiming.targetFrameTime);
             physicsIterations++;
@@ -150,9 +151,9 @@ export class Roxel {
         // Regular updates with scaled time
         const scaledDelta = this.#renderTiming.getScaledDelta();
         this.gameObjects.forEach(obj => {
-            obj.earlyUpdate?.(scaledDelta);
-            obj.update?.(scaledDelta);
-            obj.lateUpdate?.(scaledDelta);
+            obj.components.forEach(c => c.earlyUpdate?.(scaledDelta));
+            obj.components.forEach(c => c.update?.(scaledDelta));
+            obj.components.forEach(c => c.lateUpdate?.(scaledDelta));
         });
     }
 
@@ -161,11 +162,11 @@ export class Roxel {
         this.isRunning = true;
         
         this.gameObjects.forEach(obj => {
-            if (obj.awake) obj.awake();
+            obj.components.forEach(c => c.awake?.());
         });
 
         this.gameObjects.forEach(obj => {
-            if (obj.start) obj.start();
+            obj.components.forEach(c => c.start?.());
         });
 
         requestAnimationFrame(this._gameLoop);
@@ -176,8 +177,18 @@ export class Roxel {
     }
 
     addGameObject(gameObject) {
+        if (!gameObject instanceof GameObject) {
+            const oldObj = gameObject;
+            gameObject = this.createGameObject();
+            Object.assign(gameObject, oldObj);
+        }
+
         gameObject.engine = this;
         this.gameObjects.add(gameObject);
+        if (this.isRunning) {
+            gameObject.components.forEach(c => c.awake?.());
+            gameObject.components.forEach(c => c.start?.());
+        }
         if (gameObject.mesh && gameObject.material) {
             this.activeScene.add(gameObject);
         }
@@ -185,6 +196,7 @@ export class Roxel {
     }
 
     removeGameObject(gameObject) {
+        gameObject.components.forEach(c => c.onDestroy?.());
         this.gameObjects.delete(gameObject);
         this.activeScene.remove(gameObject);
     }
@@ -251,7 +263,7 @@ export class Roxel {
             }
             
             this.gameObjects.forEach(obj => {
-                if (obj.onResize) obj.onResize(this.canvas.width, this.canvas.height);
+                obj.components.forEach(c => c.onResize?.(this.canvas.width, this.canvas.height));
             });
         }
     }
@@ -423,55 +435,11 @@ export class Roxel {
     }
 
     setChunkLoadDistance(distance) {
-        this.chunkLoadDistance = distance;
+        this.#chunkManager.setLoadDistance(distance);
     }
 
     setChunkUpdateInterval(interval) {
-        this.chunkUpdateInterval = interval;
-    }
-
-    #updateChunks(timestamp) {
-        if (timestamp - this.lastChunkUpdate > this.chunkUpdateInterval) {
-            this.lastChunkUpdate = timestamp;
-
-            if (this.activeScene && this.activeScene.world && this.camera) {
-                const world = this.activeScene.world;
-                const cameraPos = this.camera.position;
-                const chunkSize = world.chunkSize;
-                const currentChunkX = Math.floor(cameraPos.x / chunkSize);
-                const currentChunkY = Math.floor(cameraPos.y / chunkSize);
-                const currentChunkZ = Math.floor(cameraPos.z / chunkSize);
-
-                const requiredChunks = new Set();
-                // Determine which chunks should be loaded
-                for (let x = currentChunkX - this.chunkLoadDistance; x <= currentChunkX + this.chunkLoadDistance; x++) {
-                    for (let y = currentChunkY - this.chunkLoadDistance; y <= currentChunkY + this.chunkLoadDistance; y++) {
-                        for (let z = currentChunkZ - this.chunkLoadDistance; z <= currentChunkZ + this.chunkLoadDistance; z++) {
-                            requiredChunks.add(`${x},${y},${z}`);
-                        }
-                    }
-                }
-
-                // Unload chunks that are no longer needed
-                for (const chunkKey of world.chunkPool.keys()) {
-                    if (!requiredChunks.has(chunkKey)) {
-                        world.chunkPool.delete(chunkKey);
-                        world.isDirty = true;
-                    }
-                }
-
-                // Load new chunks
-                for (const chunkKey of requiredChunks) {
-                    const [x, y, z] = chunkKey.split(',').map(Number);
-                    if (!world.getChunk(x, y, z)) {
-                        world.createChunk(x, y, z);
-                    }
-                }
-
-                // Update chunk visibility for occlusion culling
-                world.updateVisibility();
-            }
-        }
+        this.#chunkManager.chunkUpdateInterval = interval;
     }
 
     // Add proper cleanup
@@ -495,18 +463,32 @@ export class GameObject {
         this.rotation = { x: 0, y: 0, z: 0 };
         this.scale = { x: 1, y: 1, z: 1 };
         this.engine = null;
+        this.components = [];
     }
 
-    awake() {}
-    start() {}
-    earlyUpdate() {}
-    fixedUpdate() {}
-    update() {}
-    lateUpdate() {}
-    onDestroy() {}
-    onEnable() {}
-    onDisable() {}
-    onCollision() {}
-    onTrigger() {}
-    onResize() {}
+    addComponent(component) {
+        if (!(component instanceof Component)) {
+            throw new Error("Can only add instances of Component.");
+        }
+        component.gameObject = this;
+        this.components.push(component);
+
+        if (this.engine && this.engine.isRunning) {
+            component.awake?.();
+            component.start?.();
+        }
+        return component;
+    }
+
+    getComponent(componentClass) {
+        return this.components.find(c => c instanceof componentClass);
+    }
+
+    removeComponent(component) {
+        const index = this.components.indexOf(component);
+        if (index > -1) {
+            component.onDestroy?.();
+            this.components.splice(index, 1);
+        }
+    }
 }
