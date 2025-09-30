@@ -1,9 +1,12 @@
 import { World } from '../core/World.js';
+import { Noise } from '../utils/Noise.js';
 
 export class Scene {
     constructor() {
         this.children = [];
-        this.world = new World();
+        this.world = new World({
+            noise: new Noise()
+        });
         this.textures = new Map();
         this.engine = null;
         this.isDirty = true;
@@ -28,7 +31,9 @@ export class Scene {
 
     clear() {
         this.children = [];
-        this.world = new World();
+        this.world = new World({
+            noise: new Noise()
+        });
         this.textures.clear();
         this.isDirty = true;
     }

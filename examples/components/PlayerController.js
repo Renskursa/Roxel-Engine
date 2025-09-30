@@ -1,5 +1,4 @@
-import { Component } from '../../src/core/Component.js';
-import { Vector3 } from '../../src/datatypes/Vector3.js';
+import { Component, Vector3 } from '../../dist/roxel-engine.esm.js';
 
 export class PlayerController extends Component {
     constructor() {
@@ -17,6 +16,7 @@ export class PlayerController extends Component {
 
     update(deltaTime) {
         // Mouse look
+        console.log('update', this.input);
         const sensitivity = 0.005;
         if (document.pointerLockElement === this.gameObject.engine.canvas) {
             const mouseMotion = this.input.getMouseMotion();

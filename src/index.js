@@ -8,6 +8,7 @@ export { World } from './core/World.js';
 export { Texture } from './core/Texture.js';
 
 // Base Classes and Types
+export { Component } from './core/Component.js';
 export { GameObject } from './core/Roxel.js';
 export { Entity } from './entities/Entity.js';
 export { Player } from './entities/Player.js';

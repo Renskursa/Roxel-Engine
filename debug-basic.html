@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Basic Example</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="roxel-canvas"></canvas>
+    <script type="module">
+        import { Roxel, Vector3 } from './dist/roxel-engine.esm.js';
+
+        // Create a new engine instance, attaching it to the canvas with id 'roxel-canvas'
+        const engine = new Roxel('roxel-canvas');
+
+        // Start the engine's game loop
+        engine.start();
+
+        // Optional: Add some basic camera controls for demonstration
+        const camera = engine.camera;
+        const input = engine.getInput();
+
+        // Pre-allocate vectors to avoid memory leaks
+        const forward = new Vector3();
+        const right = new Vector3();
+        const movement = new Vector3();
+
+        console.log('Initial camera position:', camera.position);
+        console.log('Initial camera rotation:', camera.rotation);
+        console.log('Engine started successfully');
+        console.log('Input system:', input);
+        
+        // Test if JavaScript is running
+        console.log('About to start engine...');
+        console.log('Engine running state:', engine.isRunning);
+        
+        // Test input directly
+        setInterval(() => {
+            if (input.getKey('KeyW')) {
+                console.log('W key is being pressed!');
+            }
+        }, 100);
+
+        engine.addGameObject({
+            update: (deltaTime) => {
+                console.log('Update called, deltaTime:', deltaTime);
+                const moveSpeed = 5 * deltaTime;
+                const rotateSpeed = 2 * deltaTime;
+
+                // Basic movement - reuse vectors to prevent memory leaks
+                if (input.getKey('KeyW')) {
+                    console.log('W pressed, moving forward');
+                    camera.getForwardVector(forward);
+                    console.log('Forward vector:', forward);
+                    movement.copy(forward).multiplyScalar(moveSpeed);
+                    console.log('Movement vector:', movement);
+                    console.log('Camera position before:', camera.position);
+                    camera.position.add(movement);
+                    console.log('Camera position after:', camera.position);
+                    console.log('Camera view matrix after movement:', camera.viewMatrix.elements);
+                }
+                if (input.getKey('KeyS')) {
+                    console.log('S pressed, moving backward');
+                    camera.getForwardVector(forward);
+                    movement.copy(forward).multiplyScalar(-moveSpeed);
+                    camera.position.add(movement);
+                }
+                if (input.getKey('KeyA')) {
+                    console.log('A pressed, moving left');
+                    camera.getRightVector(right);
+                    movement.copy(right).multiplyScalar(-moveSpeed);
+                    camera.position.add(movement);
+                }
+                if (input.getKey('KeyD')) {
+                    console.log('D pressed, moving right');
+                    camera.getRightVector(right);
+                    movement.copy(right).multiplyScalar(moveSpeed);
+                    camera.position.add(movement);
+                }
+                if (input.getKey('Space')) {
+                    console.log('Space pressed, moving up');
+                    camera.position.y += moveSpeed;
+                }
+                if (input.getKey('ShiftLeft')) {
+                    console.log('Shift pressed, moving down');
+                    camera.position.y -= moveSpeed;
+                }
+
+                // Basic rotation
+                if (input.getKey('ArrowLeft')) {
+                    camera.rotate(rotateSpeed, 0);
+                }
+                if (input.getKey('ArrowRight')) {
+                    camera.rotate(-rotateSpeed, 0);
+                }
+                if (input.getKey('ArrowUp')) {
+                    camera.rotate(0, rotateSpeed);
+                }
+                if (input.getKey('ArrowDown')) {
+                    camera.rotate(0, -rotateSpeed);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

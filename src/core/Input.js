@@ -29,7 +29,6 @@ export class Input {
         window.addEventListener('mousedown', this.handleMouseDown.bind(this), false);
         window.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
         window.addEventListener('wheel', this.handleMouseWheel.bind(this), { passive: false });
-        
         // Context menu
         window.addEventListener('contextmenu', e => e.preventDefault());
     }

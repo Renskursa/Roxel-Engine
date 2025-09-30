@@ -40,6 +40,10 @@ export class Roxel {
         this.#physicsTiming = new Timing(120);
         this.#vsyncEnabled = false;
         
+        // Make canvas focusable for keyboard input
+        this.canvas.tabIndex = 0;
+        this.canvas.style.outline = 'none';
+        
         this.camera = new Camera();
         this.camera.setPerspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 1000);
         this.camera.setPosition(0, 5, -10);
@@ -87,6 +91,14 @@ export class Roxel {
         this._gameLoop = this._gameLoop.bind(this);
         this.#input.initialize();
         this.onResize();
+        
+        // Enable focus manager by default for keyboard input
+        this.enableFocusManager(true);
+        
+        // Add click handler to focus canvas for keyboard input
+        this.canvas.addEventListener('click', () => {
+            this.canvas.focus();
+        });
     }
 
     _gameLoop(timestamp) {
@@ -290,6 +302,18 @@ export class Roxel {
         this.#focusManager.isEnabled = enabled;
         try {
             if (!enabled && this.#focusManager.isPointerLocked) {
+                document.exitPointerLock();
+            }
+        } catch (e) {
+            console.error('Failed to unlock pointer:', e);
+        }
+    }
+
+    disableFocusManager() {
+        this.#focusManager.isEnabled = false;
+        this.#focusManager.isManaged = false;
+        try {
+            if (this.#focusManager.isPointerLocked) {
                 document.exitPointerLock();
             }
         } catch (e) {
