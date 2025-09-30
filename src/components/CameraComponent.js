@@ -1,4 +1,4 @@
-import { Camera, CameraControlMode } from '../entities/Camera.js';
+import { Camera, CameraControlMode } from '../core/Camera.js';
 import { Vector3 } from '../datatypes/Vector3.js';
 
 export class CameraComponent {

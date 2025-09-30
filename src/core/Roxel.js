@@ -1,11 +1,9 @@
 import { Input } from './Input.js';
 import { WebGLRenderer } from '../renderer/WebGLRenderer.js';
-import { Camera } from '../entities/Camera.js';
-import { WorldManager } from './WorldManager.js';
+import { Camera } from './Camera.js';
 import { Timing } from './Timing.js';
 import { SceneLoader } from '../scenes/SceneLoader.js';
-import { VoxelBufferPool } from '../renderer/VoxelBufferPool';
-import { VoxelChunk } from '../entities/VoxelChunk';
+import { Scene } from '../scenes/Scene.js';
 
 export class Roxel {
     #input;
@@ -28,9 +26,6 @@ export class Roxel {
         // Initialize game state
         this.#initializeGameState();
         
-        // Initialize buffer pool for chunks
-        VoxelChunk.bufferPool = new VoxelBufferPool();
-        
         console.log('Roxel engine initialized');
     }
 
@@ -44,12 +39,11 @@ export class Roxel {
         
         this.camera = new Camera();
         this.camera.setPerspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 1000);
-        this.camera.setPosition(0, 0, -10);
+        this.camera.setPosition(0, 5, -10);
         this.camera.lookAt(0, 0, 0);
     }
 
     #initializeManagers() {
-        this.worldManager = new WorldManager();
         this.#sceneLoader = new SceneLoader(this);
         this.#focusManager = {
             isPointerLocked: false,
@@ -79,7 +73,7 @@ export class Roxel {
     }
 
     #initializeGameState() {
-        this.activeScene = null;
+        this.activeScene = new Scene();
         this.gameObjects = new Set();
         this.isRunning = false;
         this.lastTime = 0;
@@ -87,7 +81,7 @@ export class Roxel {
         this.deltaTime = 0;
         
         // Chunk management settings
-        this.chunkLoadDistance = 2;
+        this.chunkLoadDistance = 8;
         this.chunkUpdateInterval = 500;
         this.lastChunkUpdate = 0;
 
@@ -120,6 +114,7 @@ export class Roxel {
         this.#input.update();
         this.#updateGameObjects();
         this.#sceneLoader.update();
+        this.#updateChunks(timestamp);
         
         // Render
         if (this.camera) {
@@ -192,10 +187,6 @@ export class Roxel {
     removeGameObject(gameObject) {
         this.gameObjects.delete(gameObject);
         this.activeScene.remove(gameObject);
-    }
-
-    getWorldManager() {
-        return this.worldManager;
     }
 
     setGameFPS(fps) {
@@ -299,14 +290,6 @@ export class Roxel {
         return this.#focusManager.isEnabled;
     }
     
-    get worldManager() {
-        return this._worldManager;
-    }
-    
-    set worldManager(manager) {
-        this._worldManager = manager;
-    }
-
     createGameObject(options = {}) {
         const obj = new GameObject();
         
@@ -441,11 +424,35 @@ export class Roxel {
 
     setChunkLoadDistance(distance) {
         this.chunkLoadDistance = distance;
-        this.worldManager.setChunkLoadDistance(distance);
     }
 
     setChunkUpdateInterval(interval) {
         this.chunkUpdateInterval = interval;
+    }
+
+    #updateChunks(timestamp) {
+        if (timestamp - this.lastChunkUpdate > this.chunkUpdateInterval) {
+            this.lastChunkUpdate = timestamp;
+
+            if (this.activeScene && this.activeScene.world && this.camera) {
+                const world = this.activeScene.world;
+                const cameraPos = this.camera.position;
+                const chunkSize = world.chunkSize;
+                const currentChunkX = Math.floor(cameraPos.x / chunkSize);
+                const currentChunkY = Math.floor(cameraPos.y / chunkSize);
+                const currentChunkZ = Math.floor(cameraPos.z / chunkSize);
+
+                for (let x = currentChunkX - this.chunkLoadDistance; x <= currentChunkX + this.chunkLoadDistance; x++) {
+                    for (let y = currentChunkY - this.chunkLoadDistance; y <= currentChunkY + this.chunkLoadDistance; y++) {
+                        for (let z = currentChunkZ - this.chunkLoadDistance; z <= currentChunkZ + this.chunkLoadDistance; z++) {
+                            if (!world.getChunk(x, y, z)) {
+                                world.createChunk(x, y, z);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Add proper cleanup
@@ -459,8 +466,6 @@ export class Roxel {
         
         // Remove event listeners
         window.removeEventListener('resize', this.onResize);
-        VoxelChunk.bufferPool.cleanup();
-        VoxelChunk.bufferPool = null;
         this.canvas = null;
     }
 }

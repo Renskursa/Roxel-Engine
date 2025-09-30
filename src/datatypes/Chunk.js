@@ -29,6 +29,7 @@ export class Chunk {
         this.isDirty = true;
         this.creationTime = performance.now();
         this.hasInitializedAnimation = false;
+        this.visible = true;
     }
 
     computeVoxelIndex(x, y, z) {
@@ -176,31 +177,16 @@ export class Chunk {
     }
 
     generateRenderData() {
-        const vertices = [];
-        const indices = [];
-        const colors = [];
-        let indexOffset = 0;
-
+        const instances = [];
         this.iterateVoxels((voxel) => {
-            if (!voxel.visible) return;
-            
-            const voxelData = voxel.generateRenderData();
-            vertices.push(...voxelData.vertices);
-            
-            // Add indices with offset
-            for (const index of voxelData.indices) {
-                indices.push(index + indexOffset);
+            if (voxel.visible && voxel.type > 0) {
+                instances.push({
+                    position: [voxel.x, voxel.y, voxel.z],
+                    color: voxel.getColor(),
+                    ao: 1.0, // Placeholder for ambient occlusion
+                });
             }
-            
-            // Add colors
-            const voxelColor = voxel.getColor();
-            for (let i = 0; i < voxelData.vertices.length / 3; i++) {
-                colors.push(...voxelColor);
-            }
-            
-            indexOffset += voxelData.vertices.length / 3;
         });
-
-        return { vertices, indices, colors };
+        return { instances };
     }
 }

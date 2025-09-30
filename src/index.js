@@ -3,8 +3,9 @@ export { Roxel } from './core/Roxel.js';
 
 // Core Components
 export { Scene } from './scenes/Scene.js';
-export { Camera } from './entities/Camera.js';
-export { WorldManager } from './core/WorldManager.js';
+export { Camera } from './core/Camera.js';
+export { World } from './core/World.js';
+export { Texture } from './core/Texture.js';
 
 // Base Classes and Types
 export { GameObject } from './core/Roxel.js';
@@ -16,7 +17,6 @@ export { Voxel } from './datatypes/Voxel.js';
 export { Chunk } from './datatypes/Chunk.js';
 export { Color } from './utils/ColorUtils.js';
 export { KeyCode, InputAxis } from './core/InputSystem.js';
-export { VoxelChunk } from './entities/VoxelChunk.js';
 
 // Utility Classes
 export { MathUtils } from './utils/MathUtils.js';
@@ -28,3 +28,4 @@ export { PLYLoader } from './loaders/PLYLoader.js';
 // Rendering Components
 export { WebGLRenderer } from './renderer/WebGLRenderer.js';
 export { RenderableComponent } from './components/RenderableComponent.js';
+export { Sky } from './renderer/Sky.js';
