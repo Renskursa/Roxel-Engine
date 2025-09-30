@@ -81,8 +81,8 @@ export class Roxel {
         this.deltaTime = 0;
         
         // Chunk management settings
-        this.chunkLoadDistance = 2;
-        this.chunkUpdateInterval = 1000;
+        this.chunkLoadDistance = 8;
+        this.chunkUpdateInterval = 500;
         this.lastChunkUpdate = 0;
 
         this._gameLoop = this._gameLoop.bind(this);
@@ -456,6 +456,7 @@ export class Roxel {
                 for (const chunkKey of world.chunkPool.keys()) {
                     if (!requiredChunks.has(chunkKey)) {
                         world.chunkPool.delete(chunkKey);
+                        world.isDirty = true;
                     }
                 }
 
@@ -466,6 +467,9 @@ export class Roxel {
                         world.createChunk(x, y, z);
                     }
                 }
+
+                // Update chunk visibility for occlusion culling
+                world.updateVisibility();
             }
         }
     }

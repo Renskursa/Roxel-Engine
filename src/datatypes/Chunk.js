@@ -30,6 +30,8 @@ export class Chunk {
         this.creationTime = performance.now();
         this.hasInitializedAnimation = false;
         this.visible = true;
+        this.isDirty = true;
+        this._renderDataCache = null;
     }
 
     computeVoxelIndex(x, y, z) {
@@ -177,6 +179,10 @@ export class Chunk {
     }
 
     generateRenderData() {
+        if (!this.isDirty && this._renderDataCache) {
+            return this._renderDataCache;
+        }
+
         const instances = [];
         this.iterateVoxels((voxel) => {
             if (voxel.visible && voxel.type > 0) {
@@ -187,6 +193,18 @@ export class Chunk {
                 });
             }
         });
-        return { instances };
+
+        this._renderDataCache = { instances };
+        this.isDirty = false;
+        return this._renderDataCache;
+    }
+
+    isFull() {
+        for (let i = 0; i < this.voxelTypes.length; i++) {
+            if (this.voxelTypes[i] === 0) {
+                return false;
+            }
+        }
+        return true;
     }
 }

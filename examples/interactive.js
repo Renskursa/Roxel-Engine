@@ -31,25 +31,37 @@ const playerController = {
     raycast: (start, direction, maxDistance) => {
         const step = direction.clone().normalize().multiplyScalar(0.1);
         let currentPos = start.clone();
-        let lastPos = start.clone();
 
         for (let i = 0; i < maxDistance * 10; i++) {
+            const lastPos = currentPos.clone();
             currentPos.add(step);
+
             const x = Math.floor(currentPos.x);
             const y = Math.floor(currentPos.y);
             const z = Math.floor(currentPos.z);
 
             if (world.getVoxel(x, y, z) > 0) {
+                // Hit a solid voxel. Now determine the normal.
+                const voxelCenter = new Vector3(x + 0.5, y + 0.5, z + 0.5);
+                const pointOfEntry = lastPos; // Approximate point of entry
+
+                const diff = pointOfEntry.clone().subtract(voxelCenter);
+                const absDiff = new Vector3(Math.abs(diff.x), Math.abs(diff.y), Math.abs(diff.z));
+
+                let normal = new Vector3(0, 0, 0);
+                if (absDiff.x > absDiff.y && absDiff.x > absDiff.z) {
+                    normal.x = Math.sign(diff.x);
+                } else if (absDiff.y > absDiff.z) {
+                    normal.y = Math.sign(diff.y);
+                } else {
+                    normal.z = Math.sign(diff.z);
+                }
+
                 return {
                     position: new Vector3(x, y, z),
-                    normal: new Vector3(
-                        Math.floor(lastPos.x) - x,
-                        Math.floor(lastPos.y) - y,
-                        Math.floor(lastPos.z) - z
-                    )
+                    normal: normal
                 };
             }
-            lastPos.copy(currentPos);
         }
         return null;
     },

@@ -18,11 +18,7 @@
     "lint": "eslint src",
     "clean": "rimraf dist",
     "serve": "http-server . -c-1",
-    "type-check": "tsc --noEmit",
-    "example:basic": "npm run build && http-server . -c-1 -o examples/basic.html",
-    "example:custom-world": "npm run build && http-server . -c-1 -o examples/custom-world.html",
-    "example:interactive": "npm run build && http-server . -c-1 -o examples/interactive.html",
-    "examples": "npm run build && http-server . -c-1 -o examples/"
+    "type-check": "tsc --noEmit"
   },
   "repository": {
     "type": "git",

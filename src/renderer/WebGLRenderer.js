@@ -2,6 +2,7 @@ import { CanvasManager } from './CanvasManager';
 import { Matrix4 } from '../datatypes/Matrix4';
 import { ShaderManager } from './ShaderManager';
 import { Sky } from './Sky.js';
+import { Culling } from '../utils/Culling.js';
 import { CUBE_VERTICES, CUBE_INDICES, CUBE_NORMALS, WIREFRAME_INDICES } from './CubeGeometry.js';
 
 export class WebGLRenderer {
@@ -39,8 +40,7 @@ export class WebGLRenderer {
     // Initialize remaining properties
     this.maxBatchSize = 65536;
     this.staticBuffers = new Map();
-    this.frustumMatrix = new Matrix4();
-    this.frustumPlanes = new Float32Array(24);
+    this.culling = new Culling();
     this.sharedUniforms = {
         buffer: this.gl.createBuffer(),
         data: new Float32Array(16 * 3)
@@ -79,6 +79,8 @@ export class WebGLRenderer {
     
     // Preallocate reusable instance data array
     this.sharedInstanceData = new Float32Array(this.instanceBufferSize);
+
+    this.renderQueue = [];
 
     this.resize();
   }
@@ -149,13 +151,17 @@ export class WebGLRenderer {
     this.updateSharedUniforms(camera);
     
     // Update frustum planes for culling
-    this.updateFrustumPlanes(camera);
+    this.culling.updateFrustumPlanes(camera);
 
     // Sort objects by material/shader to minimize state changes
-    const renderQueue = this.sortRenderQueue(scene);
+    if (scene.isDirty || scene.world.isDirty) {
+        this.renderQueue = this.sortRenderQueue(scene);
+        scene.isDirty = false;
+        scene.world.isDirty = false;
+    }
 
     // Batch similar objects together
-    for (const batch of renderQueue) {
+    for (const batch of this.renderQueue) {
         this.renderBatch(batch);
     }
   }
@@ -441,63 +447,6 @@ export class WebGLRenderer {
 
   }
 
-  updateFrustumPlanes(camera) {
-    // Compute view-projection matrix
-    this.frustumMatrix.multiply(camera.projectionMatrix, camera.viewMatrix);
-    
-    // Extract frustum planes
-    const m = this.frustumMatrix.elements;
-    
-    // Left plane
-    this.frustumPlanes[0] = m[3] + m[0];
-    this.frustumPlanes[1] = m[7] + m[4];
-    this.frustumPlanes[2] = m[11] + m[8];
-    this.frustumPlanes[3] = m[15] + m[12];
-    
-    // Right plane
-    this.frustumPlanes[4] = m[3] - m[0];
-    this.frustumPlanes[5] = m[7] - m[4];
-    this.frustumPlanes[6] = m[11] - m[8];
-    this.frustumPlanes[7] = m[15] - m[12];
-    
-    // Bottom plane
-    this.frustumPlanes[8] = m[3] + m[1];
-    this.frustumPlanes[9] = m[7] + m[5];
-    this.frustumPlanes[10] = m[11] + m[9];
-    this.frustumPlanes[11] = m[15] + m[13];
-    
-    // Top plane
-    this.frustumPlanes[12] = m[3] - m[1];
-    this.frustumPlanes[13] = m[7] - m[5];
-    this.frustumPlanes[14] = m[11] - m[9];
-    this.frustumPlanes[15] = m[15] - m[13];
-    
-    // Near plane
-    this.frustumPlanes[16] = m[3] + m[2];
-    this.frustumPlanes[17] = m[7] + m[6];
-    this.frustumPlanes[18] = m[11] + m[10];
-    this.frustumPlanes[19] = m[15] + m[14];
-    
-    // Far plane
-    this.frustumPlanes[20] = m[3] - m[2];
-    this.frustumPlanes[21] = m[7] - m[6];
-    this.frustumPlanes[22] = m[11] - m[10];
-    this.frustumPlanes[23] = m[15] - m[14];
-  }
-
-  isCulled(position) {
-    // Quick frustum culling check
-    for (let i = 0; i < 24; i += 4) {
-        const distance = 
-            this.frustumPlanes[i] * position[0] +
-            this.frustumPlanes[i + 1] * position[1] +
-            this.frustumPlanes[i + 2] * position[2] +
-            this.frustumPlanes[i + 3];
-            
-        if (distance < -1.0) return true;
-    }
-    return false;
-  }
 
   sortRenderQueue(scene) {
     const queue = new Map();
@@ -506,6 +455,17 @@ export class WebGLRenderer {
     for (const obj of objects) {
         if (!obj?.visible) continue;
         
+        // Frustum culling for chunks
+        if (obj.x !== undefined && obj.y !== undefined && obj.z !== undefined) {
+            const box = {
+                min: [obj.x * obj.size, obj.y * obj.size, obj.z * obj.size],
+                max: [(obj.x + 1) * obj.size, (obj.y + 1) * obj.size, (obj.z + 1) * obj.size]
+            };
+            if (this.culling.isCulled(box)) {
+                continue;
+            }
+        }
+
         const renderData = obj.generateRenderData?.();
         if (!renderData?.instances?.length) continue;
         

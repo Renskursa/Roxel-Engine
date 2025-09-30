@@ -95,21 +95,18 @@ export class Camera {
         return this;
     }
 
-    getForwardVector(out = null) {
-        const result = out || new Vector3();
-        result.set(
+    getForwardVector() {
+        return new Vector3(
             Math.sin(this.rotation.y) * Math.cos(this.rotation.x),
             Math.sin(this.rotation.x),
             Math.cos(this.rotation.y) * Math.cos(this.rotation.x)
-        );
-        return result.normalize();
+        ).normalize();
     }
 
-    getRightVector(out = null) {
-        const result = out || new Vector3();
+    getRightVector() {
+        // Fix right vector calculation
         const forward = this.getForwardVector();
-        Vector3.cross(forward, this.up, result);
-        return result.normalize();
+        return Vector3.cross(forward, this.up).normalize();
     }
 
     lookAt(x, y, z) {

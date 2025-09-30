@@ -6,11 +6,13 @@ export class Scene {
         this.world = new World();
         this.textures = new Map();
         this.engine = null;
+        this.isDirty = true;
     }
 
     add(object) {
         if (!this.children.includes(object)) {
             this.children.push(object);
+            this.isDirty = true;
             return true;
         }
         return false;
@@ -20,6 +22,7 @@ export class Scene {
         const childIndex = this.children.indexOf(object);
         if (childIndex !== -1) {
             this.children.splice(childIndex, 1);
+            this.isDirty = true;
         }
     }
 
@@ -27,6 +30,7 @@ export class Scene {
         this.children = [];
         this.world = new World();
         this.textures.clear();
+        this.isDirty = true;
     }
 
     // Scene-specific lifecycle methods only
