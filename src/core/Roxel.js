@@ -1,11 +1,11 @@
 import { Input } from './Input.js';
 import { WebGLRenderer } from '../renderer/WebGLRenderer.js';
-import { Camera } from '../entities/Camera.js';
-import { WorldManager } from './WorldManager.js';
+import { Camera } from './Camera.js';
 import { Timing } from './Timing.js';
 import { SceneLoader } from '../scenes/SceneLoader.js';
-import { VoxelBufferPool } from '../renderer/VoxelBufferPool';
-import { VoxelChunk } from '../entities/VoxelChunk';
+import { Scene } from '../scenes/Scene.js';
+import { Component } from './Component.js';
+import { ChunkManager } from './ChunkManager.js';
 
 export class Roxel {
     #input;
@@ -14,6 +14,7 @@ export class Roxel {
     #vsyncEnabled;
     #focusManager;
     #sceneLoader;
+    #chunkManager;
 
     constructor(canvasId) {
         // Initialize core systems
@@ -28,9 +29,6 @@ export class Roxel {
         // Initialize game state
         this.#initializeGameState();
         
-        // Initialize buffer pool for chunks
-        VoxelChunk.bufferPool = new VoxelBufferPool();
-        
         console.log('Roxel engine initialized');
     }
 
@@ -44,12 +42,11 @@ export class Roxel {
         
         this.camera = new Camera();
         this.camera.setPerspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 1000);
-        this.camera.setPosition(0, 0, -10);
+        this.camera.setPosition(0, 5, -10);
         this.camera.lookAt(0, 0, 0);
     }
 
     #initializeManagers() {
-        this.worldManager = new WorldManager();
         this.#sceneLoader = new SceneLoader(this);
         this.#focusManager = {
             isPointerLocked: false,
@@ -79,17 +76,13 @@ export class Roxel {
     }
 
     #initializeGameState() {
-        this.activeScene = null;
+        this.activeScene = new Scene();
+        this.#chunkManager = new ChunkManager(this.activeScene.world, this.activeScene);
         this.gameObjects = new Set();
         this.isRunning = false;
         this.lastTime = 0;
         this.lastFrameTime = 0;
         this.deltaTime = 0;
-        
-        // Chunk management settings
-        this.chunkLoadDistance = 2;
-        this.chunkUpdateInterval = 500;
-        this.lastChunkUpdate = 0;
 
         this._gameLoop = this._gameLoop.bind(this);
         this.#input.initialize();
@@ -120,6 +113,9 @@ export class Roxel {
         this.#input.update();
         this.#updateGameObjects();
         this.#sceneLoader.update();
+        if (this.camera) {
+            this.#chunkManager.update(this.camera.position);
+        }
         
         // Render
         if (this.camera) {
@@ -146,7 +142,7 @@ export class Roxel {
         while (this.#physicsTiming.getAccumulatedTime() >= this.#physicsTiming.targetFrameTime && 
                physicsIterations < 5) {
             this.gameObjects.forEach(obj => {
-                obj.fixedUpdate?.(physicsScaledDelta);
+                obj.components.forEach(c => c.fixedUpdate?.(physicsScaledDelta));
             });
             this.#physicsTiming.consumeAccumulatedTime(this.#physicsTiming.targetFrameTime);
             physicsIterations++;
@@ -155,9 +151,9 @@ export class Roxel {
         // Regular updates with scaled time
         const scaledDelta = this.#renderTiming.getScaledDelta();
         this.gameObjects.forEach(obj => {
-            obj.earlyUpdate?.(scaledDelta);
-            obj.update?.(scaledDelta);
-            obj.lateUpdate?.(scaledDelta);
+            obj.components.forEach(c => c.earlyUpdate?.(scaledDelta));
+            obj.components.forEach(c => c.update?.(scaledDelta));
+            obj.components.forEach(c => c.lateUpdate?.(scaledDelta));
         });
     }
 
@@ -166,11 +162,11 @@ export class Roxel {
         this.isRunning = true;
         
         this.gameObjects.forEach(obj => {
-            if (obj.awake) obj.awake();
+            obj.components.forEach(c => c.awake?.());
         });
 
         this.gameObjects.forEach(obj => {
-            if (obj.start) obj.start();
+            obj.components.forEach(c => c.start?.());
         });
 
         requestAnimationFrame(this._gameLoop);
@@ -181,8 +177,18 @@ export class Roxel {
     }
 
     addGameObject(gameObject) {
+        if (!gameObject instanceof GameObject) {
+            const oldObj = gameObject;
+            gameObject = this.createGameObject();
+            Object.assign(gameObject, oldObj);
+        }
+
         gameObject.engine = this;
         this.gameObjects.add(gameObject);
+        if (this.isRunning) {
+            gameObject.components.forEach(c => c.awake?.());
+            gameObject.components.forEach(c => c.start?.());
+        }
         if (gameObject.mesh && gameObject.material) {
             this.activeScene.add(gameObject);
         }
@@ -190,12 +196,9 @@ export class Roxel {
     }
 
     removeGameObject(gameObject) {
+        gameObject.components.forEach(c => c.onDestroy?.());
         this.gameObjects.delete(gameObject);
         this.activeScene.remove(gameObject);
-    }
-
-    getWorldManager() {
-        return this.worldManager;
     }
 
     setGameFPS(fps) {
@@ -260,7 +263,7 @@ export class Roxel {
             }
             
             this.gameObjects.forEach(obj => {
-                if (obj.onResize) obj.onResize(this.canvas.width, this.canvas.height);
+                obj.components.forEach(c => c.onResize?.(this.canvas.width, this.canvas.height));
             });
         }
     }
@@ -299,14 +302,6 @@ export class Roxel {
         return this.#focusManager.isEnabled;
     }
     
-    get worldManager() {
-        return this._worldManager;
-    }
-    
-    set worldManager(manager) {
-        this._worldManager = manager;
-    }
-
     createGameObject(options = {}) {
         const obj = new GameObject();
         
@@ -440,12 +435,11 @@ export class Roxel {
     }
 
     setChunkLoadDistance(distance) {
-        this.chunkLoadDistance = distance;
-        this.worldManager.setChunkLoadDistance(distance);
+        this.#chunkManager.setLoadDistance(distance);
     }
 
     setChunkUpdateInterval(interval) {
-        this.chunkUpdateInterval = interval;
+        this.#chunkManager.chunkUpdateInterval = interval;
     }
 
     // Add proper cleanup
@@ -459,8 +453,6 @@ export class Roxel {
         
         // Remove event listeners
         window.removeEventListener('resize', this.onResize);
-        VoxelChunk.bufferPool.cleanup();
-        VoxelChunk.bufferPool = null;
         this.canvas = null;
     }
 }
@@ -471,18 +463,32 @@ export class GameObject {
         this.rotation = { x: 0, y: 0, z: 0 };
         this.scale = { x: 1, y: 1, z: 1 };
         this.engine = null;
+        this.components = [];
     }
 
-    awake() {}
-    start() {}
-    earlyUpdate() {}
-    fixedUpdate() {}
-    update() {}
-    lateUpdate() {}
-    onDestroy() {}
-    onEnable() {}
-    onDisable() {}
-    onCollision() {}
-    onTrigger() {}
-    onResize() {}
+    addComponent(component) {
+        if (!(component instanceof Component)) {
+            throw new Error("Can only add instances of Component.");
+        }
+        component.gameObject = this;
+        this.components.push(component);
+
+        if (this.engine && this.engine.isRunning) {
+            component.awake?.();
+            component.start?.();
+        }
+        return component;
+    }
+
+    getComponent(componentClass) {
+        return this.components.find(c => c instanceof componentClass);
+    }
+
+    removeComponent(component) {
+        const index = this.components.indexOf(component);
+        if (index > -1) {
+            component.onDestroy?.();
+            this.components.splice(index, 1);
+        }
+    }
 }

@@ -67,6 +67,10 @@ export class Vector3 {
         return this;
     }
 
+    multiplyScalar(scalar) {
+        return this.multiply(scalar);
+    }
+
     divide(scalar) {
         if (scalar !== 0) {
             this.x /= scalar;

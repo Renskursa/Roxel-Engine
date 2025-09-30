@@ -1,4 +1,4 @@
-import { Color } from '../utils/ColorUtils';
+import { Color } from '../utils/ColorUtils.js';
 
 /**
  * Represents a single voxel (volumetric pixel) in a 3D space

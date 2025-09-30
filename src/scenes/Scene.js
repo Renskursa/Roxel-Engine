@@ -1,18 +1,18 @@
+import { World } from '../core/World.js';
+
 export class Scene {
     constructor() {
         this.children = [];
-        this.voxels = [];
+        this.world = new World();
+        this.textures = new Map();
         this.engine = null;
+        this.isDirty = true;
     }
 
     add(object) {
-        if (object.generateRenderData) {
-            if (!this.voxels.includes(object)) {
-                this.voxels.push(object);
-                return true;
-            }
-        } else if (!this.children.includes(object)) {
+        if (!this.children.includes(object)) {
             this.children.push(object);
+            this.isDirty = true;
             return true;
         }
         return false;
@@ -20,19 +20,17 @@ export class Scene {
 
     remove(object) {
         const childIndex = this.children.indexOf(object);
-        const voxelIndex = this.voxels.indexOf(object);
-        
         if (childIndex !== -1) {
             this.children.splice(childIndex, 1);
-        }
-        if (voxelIndex !== -1) {
-            this.voxels.splice(voxelIndex, 1);
+            this.isDirty = true;
         }
     }
 
     clear() {
         this.children = [];
-        this.voxels = [];
+        this.world = new World();
+        this.textures.clear();
+        this.isDirty = true;
     }
 
     // Scene-specific lifecycle methods only
@@ -51,19 +49,18 @@ export class Scene {
         this.children.forEach(obj => {
             if (obj.update) obj.update(deltaTime);
         });
-        
-        // Update voxels that need regeneration
-        this.voxels.forEach(voxel => {
-            if (voxel && voxel._isDirty) {
-                voxel.generateRenderData();
-            }
-        });
+
+        // Update world, e.g. for dynamic chunk loading
+        if (this.world?.update) {
+            this.world.update(deltaTime);
+        }
     }
 
-    generateRenderData() {
-        return {
-            children: this.children,
-            voxels: this.voxels
-        };
+    addTexture(name, texture) {
+        this.textures.set(name, texture);
+    }
+
+    getTexture(name) {
+        return this.textures.get(name);
     }
 }

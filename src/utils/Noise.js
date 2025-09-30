@@ -1,9 +1,10 @@
 export class Noise {
     constructor(seed = Math.random()) {
+        this.seed = seed;
         // Initialize and shuffle permutation table for consistent noise
         this.permutation = new Array(256).fill(0).map((_, i) => i);
         
-        let rand = this.seededRandom(seed);
+        let rand = this.seededRandom(this.seed);
         // Fisher-Yates shuffle
         for (let i = this.permutation.length - 1; i > 0; i--) {
             const j = Math.floor(rand() * (i + 1));

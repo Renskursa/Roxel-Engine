@@ -1,108 +1,11 @@
 import { CanvasManager } from './CanvasManager';
 import { Matrix4 } from '../datatypes/Matrix4';
-import { BatchManager } from './BatchManager';
 import { ShaderManager } from './ShaderManager';
-import { ChunkPool } from './ChunkPool';
-import { SkySystem } from '../systems/SkySystem';
+import { Sky } from './Sky.js';
+import { Culling } from '../utils/Culling.js';
+import { CUBE_VERTICES, CUBE_INDICES, CUBE_NORMALS, WIREFRAME_INDICES } from './CubeGeometry.js';
 
 export class WebGLRenderer {
-    // Add cube vertices as static property
-    static CUBE_VERTICES = new Float32Array([
-        // Front face
-        -0.5, -0.5,  0.5,  // 0
-         0.5, -0.5,  0.5,  // 1
-         0.5,  0.5,  0.5,  // 2
-        -0.5,  0.5,  0.5,  // 3
-        
-        // Back face
-        -0.5, -0.5, -0.5,  // 4
-        -0.5,  0.5, -0.5,  // 5
-         0.5,  0.5, -0.5,  // 6
-         0.5, -0.5, -0.5,  // 7
-        
-        // Top face
-        -0.5,  0.5, -0.5,  // 8
-        -0.5,  0.5,  0.5,  // 9
-         0.5,  0.5,  0.5,  // 10
-         0.5,  0.5, -0.5,  // 11
-        
-        // Bottom face
-        -0.5, -0.5, -0.5,  // 12
-         0.5, -0.5, -0.5,  // 13
-         0.5, -0.5,  0.5,  // 14
-        -0.5, -0.5,  0.5,  // 15
-        
-        // Right face
-         0.5, -0.5, -0.5,  // 16
-         0.5,  0.5, -0.5,  // 17
-         0.5,  0.5,  0.5,  // 18
-         0.5, -0.5,  0.5,  // 19
-        
-        // Left face
-        -0.5, -0.5, -0.5,  // 20
-        -0.5, -0.5,  0.5,  // 21
-        -0.5,  0.5,  0.5,  // 22
-        -0.5,  0.5, -0.5   // 23
-    ]);
-
-    static CUBE_INDICES = new Uint16Array([
-        0,  2,  1,    0,  3,  2,   // front
-        4,  6,  5,    4,  7,  6,   // back
-        8,  10, 9,    8,  11, 10,  // top
-        12, 14, 13,   12, 15, 14,  // bottom
-        16, 18, 17,   16, 19, 18,  // right
-        20, 22, 21,   20, 23, 22   // left
-    ]);
-
-    // Add static normals property
-    static CUBE_NORMALS = new Float32Array([
-        // Front face
-         0.0,  0.0,  1.0,
-         0.0,  0.0,  1.0,
-         0.0,  0.0,  1.0,
-         0.0,  0.0,  1.0,
-        
-        // Back face
-         0.0,  0.0, -1.0,
-         0.0,  0.0, -1.0,
-         0.0,  0.0, -1.0,
-         0.0,  0.0, -1.0,
-        
-        // Top face
-         0.0,  1.0,  0.0,
-         0.0,  1.0,  0.0,
-         0.0,  1.0,  0.0,
-         0.0,  1.0,  0.0,
-        
-        // Bottom face
-         0.0, -1.0,  0.0,
-         0.0, -1.0,  0.0,
-         0.0, -1.0,  0.0,
-         0.0, -1.0,  0.0,
-        
-        // Right face
-         1.0,  0.0,  0.0,
-         1.0,  0.0,  0.0,
-         1.0,  0.0,  0.0,
-         1.0,  0.0,  0.0,
-        
-        // Left face
-        -1.0,  0.0,  0.0,
-        -1.0,  0.0,  0.0,
-        -1.0,  0.0,  0.0,
-        -1.0,  0.0,  0.0
-    ]);
-
-    // Add wireframe indices that only draw the edges
-    static WIREFRAME_INDICES = new Uint16Array([
-        // Front face edges
-        0, 1, 1, 2, 2, 3, 3, 0,
-        // Back face edges
-        4, 5, 5, 6, 6, 7, 7, 4,
-        // Connecting edges
-        0, 4, 1, 7, 2, 6, 3, 5
-    ]);
-
   constructor(canvas = null) {
     this.canvas = canvas || CanvasManager.createFullscreenCanvas();
     this.gl = this.initWebGL2(this.canvas);
@@ -135,11 +38,9 @@ export class WebGLRenderer {
     this.initializeSharedGeometry();
     
     // Initialize remaining properties
-    this.batchManager = new BatchManager(this.gl);
     this.maxBatchSize = 65536;
     this.staticBuffers = new Map();
-    this.frustumMatrix = new Matrix4();
-    this.frustumPlanes = new Float32Array(24);
+    this.culling = new Culling();
     this.sharedUniforms = {
         buffer: this.gl.createBuffer(),
         data: new Float32Array(16 * 3)
@@ -165,11 +66,8 @@ export class WebGLRenderer {
     // Add wireframe buffer
     this.wireframeBuffer = null;
 
-    // Add chunk pool
-    this.chunkPool = new ChunkPool();
-
     // Add sky system
-    this.skySystem = new SkySystem();
+    this.sky = new Sky();
 
     // Set clear color to match void color initially
     this.gl.clearColor(0.098, 0.098, 0.098, 1.0);
@@ -181,6 +79,8 @@ export class WebGLRenderer {
     
     // Preallocate reusable instance data array
     this.sharedInstanceData = new Float32Array(this.instanceBufferSize);
+
+    this.renderQueue = [];
 
     this.resize();
   }
@@ -215,25 +115,7 @@ export class WebGLRenderer {
 
     const gl = this.gl;
 
-    // Update clear color based on camera height without fog
-    const height = camera.position.y;
-    let clearColor;
-    
-    if (height > 60) {
-        clearColor = this.skySystem.skyColor;
-    } else if (height < 0) {
-        clearColor = this.skySystem.voidColor;
-    } else {
-        const t = height / 60.0;  // Normalized height between 0 and 1
-        clearColor = {
-            r: this.lerp(this.skySystem.horizonColor.r, this.skySystem.skyColor.r, t),
-            g: this.lerp(this.skySystem.horizonColor.g, this.skySystem.skyColor.g, t),
-            b: this.lerp(this.skySystem.horizonColor.b, this.skySystem.skyColor.b, t),
-            a: 1.0
-        };
-    }
-    
-    this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+    this.sky.update(this, camera);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
 
@@ -264,44 +146,22 @@ export class WebGLRenderer {
         gl.uniformMatrix4fv(uniforms.uModelMatrix, false, this.modelMatrix.elements);
     }
 
-    // Clear previous batches
-    this.batchManager.clear();
-
-    // Handle both voxels and regular objects
-    const renderObjects = [...(scene.voxels || []), ...(scene.children || [])];
-    
-    renderObjects.forEach(obj => {
-        if (obj?.visible) {
-            const renderData = obj.generateRenderData?.() || obj;
-            if (renderData && renderData.vertices?.length > 0) {
-                // Add default colors if not provided
-                if (!renderData.colors) {
-                    renderData.colors = new Float32Array(renderData.vertices.length / 3 * 4).fill(1.0);
-                }
-                this.batchManager.addToBatch(renderData);
-            }
-        }
-    });
-
-    // Render all batches
-    for (const [materialId, batch] of this.batchManager.batches) {
-        const processedBatch = this.batchManager.processBatch(batch);
-        if (processedBatch.vertices.length > 0) {
-            this.renderBatch(processedBatch);
-        }
-    }
 
     // Update shared uniforms
     this.updateSharedUniforms(camera);
     
     // Update frustum planes for culling
-    this.updateFrustumPlanes(camera);
+    this.culling.updateFrustumPlanes(camera);
 
     // Sort objects by material/shader to minimize state changes
-    const renderQueue = this.sortRenderQueue(scene);
+    if (scene.isDirty || scene.world.isDirty) {
+        this.renderQueue = this.sortRenderQueue(scene);
+        scene.isDirty = false;
+        scene.world.isDirty = false;
+    }
 
     // Batch similar objects together
-    for (const batch of renderQueue) {
+    for (const batch of this.renderQueue) {
         this.renderBatch(batch);
     }
   }
@@ -427,17 +287,17 @@ export class WebGLRenderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
         
         // Interleave position and normal data
-        const interleavedData = new Float32Array(WebGLRenderer.CUBE_VERTICES.length * 2);
-        for (let i = 0; i < WebGLRenderer.CUBE_VERTICES.length; i += 3) {
+        const interleavedData = new Float32Array(CUBE_VERTICES.length * 2);
+        for (let i = 0; i < CUBE_VERTICES.length; i += 3) {
             const vertexIdx = (i / 3) * 6;
             // Position
-            interleavedData[vertexIdx] = WebGLRenderer.CUBE_VERTICES[i];
-            interleavedData[vertexIdx + 1] = WebGLRenderer.CUBE_VERTICES[i + 1];
-            interleavedData[vertexIdx + 2] = WebGLRenderer.CUBE_VERTICES[i + 2];
+            interleavedData[vertexIdx] = CUBE_VERTICES[i];
+            interleavedData[vertexIdx + 1] = CUBE_VERTICES[i + 1];
+            interleavedData[vertexIdx + 2] = CUBE_VERTICES[i + 2];
             // Normal
-            interleavedData[vertexIdx + 3] = WebGLRenderer.CUBE_NORMALS[i];
-            interleavedData[vertexIdx + 4] = WebGLRenderer.CUBE_NORMALS[i + 1];
-            interleavedData[vertexIdx + 5] = WebGLRenderer.CUBE_NORMALS[i + 2];
+            interleavedData[vertexIdx + 3] = CUBE_NORMALS[i];
+            interleavedData[vertexIdx + 4] = CUBE_NORMALS[i + 1];
+            interleavedData[vertexIdx + 5] = CUBE_NORMALS[i + 2];
         }
         gl.bufferData(gl.ARRAY_BUFFER, interleavedData, gl.STATIC_DRAW);
 
@@ -490,12 +350,12 @@ export class WebGLRenderer {
         // 4. Setup index buffer
         const indexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, WebGLRenderer.CUBE_INDICES, gl.STATIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, CUBE_INDICES, gl.STATIC_DRAW);
 
         // Add wireframe index buffer
         const wireframeBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireframeBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, WebGLRenderer.WIREFRAME_INDICES, gl.STATIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, WIREFRAME_INDICES, gl.STATIC_DRAW);
 
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -506,10 +366,10 @@ export class WebGLRenderer {
             vertexBuffer,
             indexBuffer,
             instanceBuffer,
-            count: WebGLRenderer.CUBE_INDICES.length,
+            count: CUBE_INDICES.length,
             maxInstances,
             wireframeBuffer,
-            wireframeCount: WebGLRenderer.WIREFRAME_INDICES.length
+            wireframeCount: WIREFRAME_INDICES.length
         };
 
     } catch (error) {
@@ -527,7 +387,6 @@ export class WebGLRenderer {
         gl.deleteBuffer(buffers.index);
     }
     this.staticBuffers.clear();
-    this.chunkPool.cleanup();
   }
 
   updateSharedUniforms(camera) {
@@ -586,152 +445,27 @@ export class WebGLRenderer {
         }
     }
 
-    // Update sky uniforms
-    if (uniforms.uSkyColor) {
-        console.log(this.skySystem.skyColor);
-        gl.uniform4f(uniforms.uSkyColor, 
-            this.skySystem.skyColor.r,
-            this.skySystem.skyColor.g,
-            this.skySystem.skyColor.b,
-            this.skySystem.skyColor.a
-        );
-    }
-    
-    if (uniforms.uVoidColor) {
-        console.log(this.skySystem.voidColor);
-        gl.uniform4f(uniforms.uVoidColor,
-            this.skySystem.voidColor.r,
-            this.skySystem.voidColor.g,
-            this.skySystem.voidColor.b,
-            this.skySystem.voidColor.a
-        );
-    }
-    
-    if (uniforms.uHorizonColor) {
-        gl.uniform4f(uniforms.uHorizonColor,
-            this.skySystem.horizonColor.r,
-            this.skySystem.horizonColor.g,
-            this.skySystem.horizonColor.b,
-            this.skySystem.horizonColor.a
-        );
-    }
-    
-    if (uniforms.uFogColor) {
-        gl.uniform4f(uniforms.uFogColor,
-            this.skySystem.fogColor.r,
-            this.skySystem.fogColor.g,
-            this.skySystem.fogColor.b,
-            this.skySystem.fogColor.a
-        );
-    }
-    
-    if (uniforms.uFogDensity) {
-        gl.uniform1f(uniforms.uFogDensity, this.skySystem.fogDensity);
-    }
-    
-    if (uniforms.uFogStart) {
-        gl.uniform1f(uniforms.uFogStart, this.skySystem.fogStart);
-    }
-    
-    if (uniforms.uFogEnd) {
-        gl.uniform1f(uniforms.uFogEnd, this.skySystem.fogEnd);
-    }
-
-    // Add fog enable uniform
-    if (uniforms.uEnableFog) {
-        gl.uniform1i(uniforms.uEnableFog, this.skySystem.enableFog);
-    }
-
-    // Only update fog uniforms if fog is enabled
-    if (this.skySystem.enableFog) {
-        if (uniforms.uFogColor) {
-            gl.uniform4f(uniforms.uFogColor,
-                this.skySystem.fogColor.r,
-                this.skySystem.fogColor.g,
-                this.skySystem.fogColor.b,
-                this.skySystem.fogColor.a
-            );
-        }
-        
-        if (uniforms.uFogDensity) {
-            gl.uniform1f(uniforms.uFogDensity, this.skySystem.fogDensity);
-        }
-        
-        if (uniforms.uFogStart) {
-            gl.uniform1f(uniforms.uFogStart, this.skySystem.fogStart);
-        }
-        
-        if (uniforms.uFogEnd) {
-            gl.uniform1f(uniforms.uFogEnd, this.skySystem.fogEnd);
-        }
-    }
   }
 
-  updateFrustumPlanes(camera) {
-    // Compute view-projection matrix
-    this.frustumMatrix.multiply(camera.projectionMatrix, camera.viewMatrix);
-    
-    // Extract frustum planes
-    const m = this.frustumMatrix.elements;
-    
-    // Left plane
-    this.frustumPlanes[0] = m[3] + m[0];
-    this.frustumPlanes[1] = m[7] + m[4];
-    this.frustumPlanes[2] = m[11] + m[8];
-    this.frustumPlanes[3] = m[15] + m[12];
-    
-    // Right plane
-    this.frustumPlanes[4] = m[3] - m[0];
-    this.frustumPlanes[5] = m[7] - m[4];
-    this.frustumPlanes[6] = m[11] - m[8];
-    this.frustumPlanes[7] = m[15] - m[12];
-    
-    // Bottom plane
-    this.frustumPlanes[8] = m[3] + m[1];
-    this.frustumPlanes[9] = m[7] + m[5];
-    this.frustumPlanes[10] = m[11] + m[9];
-    this.frustumPlanes[11] = m[15] + m[13];
-    
-    // Top plane
-    this.frustumPlanes[12] = m[3] - m[1];
-    this.frustumPlanes[13] = m[7] - m[5];
-    this.frustumPlanes[14] = m[11] - m[9];
-    this.frustumPlanes[15] = m[15] - m[13];
-    
-    // Near plane
-    this.frustumPlanes[16] = m[3] + m[2];
-    this.frustumPlanes[17] = m[7] + m[6];
-    this.frustumPlanes[18] = m[11] + m[10];
-    this.frustumPlanes[19] = m[15] + m[14];
-    
-    // Far plane
-    this.frustumPlanes[20] = m[3] - m[2];
-    this.frustumPlanes[21] = m[7] - m[6];
-    this.frustumPlanes[22] = m[11] - m[10];
-    this.frustumPlanes[23] = m[15] - m[14];
-  }
-
-  isCulled(position) {
-    // Quick frustum culling check
-    for (let i = 0; i < 24; i += 4) {
-        const distance = 
-            this.frustumPlanes[i] * position[0] +
-            this.frustumPlanes[i + 1] * position[1] +
-            this.frustumPlanes[i + 2] * position[2] +
-            this.frustumPlanes[i + 3];
-            
-        if (distance < -1.0) return true;
-    }
-    return false;
-  }
 
   sortRenderQueue(scene) {
     const queue = new Map();
-    const objects = [...(scene.voxels || []), ...(scene.children || [])];
+    const objects = [...(scene.world ? Array.from(scene.world.chunkPool.values()) : []), ...(scene.children || [])];
     
     for (const obj of objects) {
         if (!obj?.visible) continue;
         
+        // Frustum culling for chunks
+        if (obj.x !== undefined && obj.y !== undefined && obj.z !== undefined) {
+            const box = {
+                min: [obj.x * obj.size, obj.y * obj.size, obj.z * obj.size],
+                max: [(obj.x + 1) * obj.size, (obj.y + 1) * obj.size, (obj.z + 1) * obj.size]
+            };
+            if (this.culling.isCulled(box)) {
+                continue;
+            }
+        }
+
         const renderData = obj.generateRenderData?.();
         if (!renderData?.instances?.length) continue;
         
@@ -759,9 +493,5 @@ export class WebGLRenderer {
     if (enabled) {
         gl.lineWidth(1.0);
     }
-  }
-
-  lerp(a, b, t) {
-    return a + (b - a) * Math.max(0, Math.min(1, t));
   }
 }
