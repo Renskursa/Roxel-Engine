@@ -7,7 +7,7 @@ const noise = new Noise(Math.random());
 
 // Custom world generation for more interesting terrain
 engine.activeScene.world.generate = (x, y, z) => {
-    const height = Math.floor(noise.perlin2(x / 50, z / 50) * 10);
+    const height = Math.floor(noise.noise2D(x / 50, z / 50) * 10);
     if (y < height) {
         if (y === height - 1) return 2; // Grass on top
         if (y > height - 5) return 3; // Dirt below grass

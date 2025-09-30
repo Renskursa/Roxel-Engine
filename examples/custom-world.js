@@ -8,7 +8,7 @@ const noise = new Noise(Math.random());
 
 // Define a custom world generation function
 const generate = (x, y, z) => {
-    const height = Math.floor(noise.perlin2(x / 50, z / 50) * 10);
+    const height = Math.floor(noise.noise2D(x / 50, z / 50) * 10);
     if (y < height) {
         return 1; // Return 1 to place a voxel
     }

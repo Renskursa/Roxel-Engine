@@ -442,13 +442,28 @@ export class Roxel {
                 const currentChunkY = Math.floor(cameraPos.y / chunkSize);
                 const currentChunkZ = Math.floor(cameraPos.z / chunkSize);
 
+                const requiredChunks = new Set();
+                // Determine which chunks should be loaded
                 for (let x = currentChunkX - this.chunkLoadDistance; x <= currentChunkX + this.chunkLoadDistance; x++) {
                     for (let y = currentChunkY - this.chunkLoadDistance; y <= currentChunkY + this.chunkLoadDistance; y++) {
                         for (let z = currentChunkZ - this.chunkLoadDistance; z <= currentChunkZ + this.chunkLoadDistance; z++) {
-                            if (!world.getChunk(x, y, z)) {
-                                world.createChunk(x, y, z);
-                            }
+                            requiredChunks.add(`${x},${y},${z}`);
                         }
+                    }
+                }
+
+                // Unload chunks that are no longer needed
+                for (const chunkKey of world.chunkPool.keys()) {
+                    if (!requiredChunks.has(chunkKey)) {
+                        world.chunkPool.delete(chunkKey);
+                    }
+                }
+
+                // Load new chunks
+                for (const chunkKey of requiredChunks) {
+                    const [x, y, z] = chunkKey.split(',').map(Number);
+                    if (!world.getChunk(x, y, z)) {
+                        world.createChunk(x, y, z);
                     }
                 }
             }
