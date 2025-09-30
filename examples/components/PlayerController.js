@@ -13,32 +13,33 @@ export class PlayerController extends Component {
         this.camera = this.gameObject.engine.camera;
         this.input = this.gameObject.engine.getInput();
         this.world = this.gameObject.engine.activeScene.world;
-
-        // Mouse look controls
-        document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement === this.gameObject.engine.canvas) {
-                const sensitivity = 0.005;
-                this.camera.rotate(e.movementX * sensitivity, e.movementY * sensitivity);
-            }
-        });
-
-        // Block placement/breaking controls
-        document.addEventListener('mousedown', (e) => {
-            if (document.pointerLockElement === this.gameObject.engine.canvas) {
-                const hit = this.raycast(this.camera.position, this.camera.getForwardVector(), 10);
-                if (hit) {
-                    if (e.button === 0) { // Left-click to break
-                        this.world.setVoxel(hit.position.x, hit.position.y, hit.position.z, 0);
-                    } else if (e.button === 2) { // Right-click to place
-                        const placePos = hit.position.clone().add(hit.normal);
-                        this.world.setVoxel(placePos.x, placePos.y, placePos.z, 4); // Place a new block type
-                    }
-                }
-            }
-        });
     }
 
     update(deltaTime) {
+        // Mouse look
+        const sensitivity = 0.005;
+        if (document.pointerLockElement === this.gameObject.engine.canvas) {
+            const mouseMotion = this.input.getMouseMotion();
+            this.camera.rotate(mouseMotion.x * sensitivity, mouseMotion.y * sensitivity);
+        }
+
+        // Block placement/breaking
+        if (document.pointerLockElement === this.gameObject.engine.canvas) {
+            const hit = this.raycast(this.camera.position, this.camera.getForwardVector(), 10);
+
+            if (hit) {
+                // Left-click to break
+                if (this.input.getKeyDown('MouseButton0')) {
+                    this.world.setVoxel(hit.position.x, hit.position.y, hit.position.z, 0);
+                }
+                // Right-click to place
+                if (this.input.getKeyDown('MouseButton2')) {
+                    const placePos = hit.position.clone().add(hit.normal);
+                    this.world.setVoxel(placePos.x, placePos.y, placePos.z, 4);
+                }
+            }
+        }
+
         const moveSpeed = 5 * deltaTime;
 
         // Movement

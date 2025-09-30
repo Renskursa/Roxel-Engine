@@ -58,7 +58,10 @@ export class Input {
     handleMouseDown(e) {
         e.preventDefault();
         const button = `MouseButton${e.button}`;
-        this.currentKeys.set(button, true);
+        if (!this.currentKeys.get(button)) {
+            this.currentKeys.set(button, true);
+            this.keysPressedThisFrame.add(button);
+        }
     }
 
     handleMouseUp(e) {
