@@ -17,6 +17,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src",
     "clean": "rimraf dist",
+    "serve": "http-server . -c-1",
     "type-check": "tsc --noEmit"
   },
   "repository": {
@@ -43,10 +44,11 @@
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/node": "^22.10.2",
     "eslint": "^9.17.0",
+    "http-server": "^14.1.1",
     "rimraf": "^6.0.1",
     "rollup": "^4.9.0",
-    "typescript": "^5.3.3",
-    "tslib": "^2.6.2"
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
   },
   "keywords": [
     "voxel",
