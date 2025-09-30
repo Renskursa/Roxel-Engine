@@ -67,6 +67,10 @@ export class Vector3 {
         return this;
     }
 
+    multiplyScalar(scalar) {
+        return this.multiply(scalar);
+    }
+
     divide(scalar) {
         if (scalar !== 0) {
             this.x /= scalar;
@@ -127,12 +131,14 @@ export class Vector3 {
         return new Vector3(v.x / scalar, v.y / scalar, v.z / scalar);
     }
 
-    static cross(a, b) {
-        return new Vector3(
+    static cross(a, b, out = null) {
+        const result = out || new Vector3();
+        result.set(
             a.y * b.z - a.z * b.y,
             a.z * b.x - a.x * b.z,
             a.x * b.y - a.y * b.x
         );
+        return result;
     }
 
     static distance(a, b) {
