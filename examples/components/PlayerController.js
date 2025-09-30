@@ -1,4 +1,4 @@
-import { Component, Vector3 } from '../../dist/roxel-engine.esm.js';
+import { Component, Vector3, CameraControlMode } from '../../dist/roxel-engine.esm.js';
 
 export class PlayerController extends Component {
     constructor() {
@@ -10,6 +10,7 @@ export class PlayerController extends Component {
 
     start() {
         this.camera = this.gameObject.engine.camera;
+        this.camera.setControlMode(CameraControlMode.FREE);
         this.input = this.gameObject.engine.getInput();
         this.world = this.gameObject.engine.activeScene.world;
     }

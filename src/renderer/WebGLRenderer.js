@@ -21,7 +21,7 @@ export class WebGLRenderer {
     
     // Set up GL state
     this.gl.enable(this.gl.CULL_FACE);
-    this.gl.cullFace(this.gl.FRONT);
+    this.gl.cullFace(this.gl.BACK);
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthFunc(this.gl.LEQUAL);
 

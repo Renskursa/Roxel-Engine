@@ -13,6 +13,7 @@ export class Camera {
         this.target = new Vector3(0, 0, 0);  // Make sure it's a Vector3
         this.up = new Vector3(0, 1, 0);      // Make sure it's a Vector3
         this.rotation = new Vector3(0, 0, 0); // Add rotation vector
+        this.forward = new Vector3(0, 0, -1);
         
         this.fov = Math.PI / 4;
         this.aspect = 1;
@@ -50,38 +51,9 @@ export class Camera {
     updateViewMatrix() {
         if (this.controlMode === CameraControlMode.LOOKAT) {
             this.viewMatrix.lookAt(this.position, this.targetPosition, this.up);
-        } else {
-            // Manual rotation and position for FREE mode
-            const cosx = Math.cos(this.rotation.x);
-            const cosy = Math.cos(this.rotation.y);
-            const cosz = Math.cos(this.rotation.z);
-            const sinx = Math.sin(this.rotation.x);
-            const siny = Math.sin(this.rotation.y);
-            const sinz = Math.sin(this.rotation.z);
-
-            this.viewMatrix.identity();
-
-            // Apply rotations
-            this.viewMatrix.elements[0] = cosy * cosz;
-            this.viewMatrix.elements[1] = sinx * siny * cosz - cosx * sinz;
-            this.viewMatrix.elements[2] = cosx * siny * cosz + sinx * sinz;
-            this.viewMatrix.elements[4] = cosy * sinz;
-            this.viewMatrix.elements[5] = sinx * siny * sinz + cosx * cosz;
-            this.viewMatrix.elements[6] = cosx * siny * sinz - sinx * cosz;
-            this.viewMatrix.elements[8] = -siny;
-            this.viewMatrix.elements[9] = sinx * cosy;
-            this.viewMatrix.elements[10] = cosx * cosy;
-
-            // Apply translation
-            this.viewMatrix.elements[12] = -(this.position.x * this.viewMatrix.elements[0] + 
-                                          this.position.y * this.viewMatrix.elements[4] + 
-                                          this.position.z * this.viewMatrix.elements[8]);
-            this.viewMatrix.elements[13] = -(this.position.x * this.viewMatrix.elements[1] + 
-                                          this.position.y * this.viewMatrix.elements[5] + 
-                                          this.position.z * this.viewMatrix.elements[9]);
-            this.viewMatrix.elements[14] = -(this.position.x * this.viewMatrix.elements[2] + 
-                                          this.position.y * this.viewMatrix.elements[6] + 
-                                          this.position.z * this.viewMatrix.elements[10]);
+        } else if (this.controlMode === CameraControlMode.FREE) {
+            const lookAtTarget = this.position.clone().add(this.forward);
+            this.viewMatrix.lookAt(this.position, lookAtTarget, this.up);
         }
     }
 
@@ -96,11 +68,7 @@ export class Camera {
     }
 
     getForwardVector() {
-        return new Vector3(
-            Math.sin(this.rotation.y) * Math.cos(this.rotation.x),
-            Math.sin(this.rotation.x),
-            Math.cos(this.rotation.y) * Math.cos(this.rotation.x)
-        ).normalize();
+        return this.forward.clone();
     }
 
     getRightVector() {
@@ -112,13 +80,25 @@ export class Camera {
     lookAt(x, y, z) {
         this.targetPosition.set(x, y, z);
         this.controlMode = CameraControlMode.LOOKAT;
-        this.viewMatrix.lookAt(this.position, this.targetPosition, this.up);
+
+        // Update rotation based on lookAt target
+        const direction = this.targetPosition.clone().subtract(this.position).normalize();
+        this.rotation.y = Math.atan2(direction.x, -direction.z);
+        this.rotation.x = Math.asin(direction.y);
+
+        // Recalculate forward vector from new rotation
+        this.forward.x = Math.sin(this.rotation.y) * Math.cos(this.rotation.x);
+        this.forward.y = Math.sin(this.rotation.x);
+        this.forward.z = -Math.cos(this.rotation.y) * Math.cos(this.rotation.x);
+        this.forward.normalize();
+
+        this.updateViewMatrix();
         return this;
     }
 
     rotate(yawDelta, pitchDelta) {
         // Yaw rotates right for positive values, left for negative
-        this.rotation.y = (this.rotation.y - Number(yawDelta)) % (Math.PI * 2);
+        this.rotation.y = (this.rotation.y + Number(yawDelta)) % (Math.PI * 2);
         
         // Pitch rotates up for positive values, down for negative
         const maxPitch = (Math.PI / 2) * 0.999;
@@ -130,9 +110,11 @@ export class Camera {
             -maxPitch
         );
 
-        // Update target using forward vector
-        const forward = this.getForwardVector();
-        this.target.copy(this.position).add(forward);
+        // Recalculate forward vector
+        this.forward.x = Math.sin(this.rotation.y) * Math.cos(this.rotation.x);
+        this.forward.y = Math.sin(this.rotation.x);
+        this.forward.z = -Math.cos(this.rotation.y) * Math.cos(this.rotation.x);
+        this.forward.normalize();
     }
 
     move(x, y, z) {
@@ -146,7 +128,7 @@ export class Camera {
         this.position.add(movement);
 
         // Update target using same movement
-        this.target.add(movement);
+        this.targetPosition.add(movement);
 
         this.updateViewMatrix();
     }
