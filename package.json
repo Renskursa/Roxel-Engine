@@ -19,10 +19,10 @@
     "clean": "rimraf dist",
     "serve": "http-server . -c-1",
     "type-check": "tsc --noEmit",
-    "example:basic": "npm run build && http-server . -c-1 -o examples/basic.html",
-    "example:custom-world": "npm run build && http-server . -c-1 -o examples/custom-world.html",
-    "example:interactive": "npm run build && http-server . -c-1 -o examples/interactive.html",
-    "examples": "npm run build && http-server . -c-1 -o examples/"
+    "serve:basic": "http-server . -c-1 -o examples/basic.html",
+    "serve:custom-world": "http-server . -c-1 -o examples/custom-world.html",
+    "serve:interactive": "http-server . -c-1 -o examples/interactive.html",
+    "serve:examples": "http-server . -c-1 -o examples/"
   },
   "repository": {
     "type": "git",

@@ -177,10 +177,9 @@ export class Roxel {
     }
 
     addGameObject(gameObject) {
-        if (!gameObject instanceof GameObject) {
+        if (!(gameObject instanceof GameObject)) {
             const oldObj = gameObject;
-            gameObject = this.createGameObject();
-            Object.assign(gameObject, oldObj);
+            gameObject = this.createGameObject(oldObj);
         }
 
         gameObject.engine = this;
@@ -305,8 +304,10 @@ export class Roxel {
     createGameObject(options = {}) {
         const obj = new GameObject();
         
-        // Apply any provided options
-        Object.assign(obj, options);
+        // Safely apply options without overwriting the components array
+        if (options) {
+            Object.assign(obj, options);
+        }
         
         obj.engine = this;
         this.gameObjects.add(obj);
