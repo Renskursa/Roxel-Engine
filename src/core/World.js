@@ -75,14 +75,14 @@ export class World {
             };
 
             const isOccluded =
-                (neighbors.front  && neighbors.front.isFull()) &&
-                (neighbors.back   && neighbors.back.isFull()) &&
-                (neighbors.top    && neighbors.top.isFull()) &&
-                (neighbors.bottom && neighbors.bottom.isFull()) &&
-                (neighbors.right  && neighbors.right.isFull()) &&
-                (neighbors.left   && neighbors.left.isFull());
+                !!(neighbors.front  && neighbors.front.isFull()) &&
+                !!(neighbors.back   && neighbors.back.isFull()) &&
+                !!(neighbors.top    && neighbors.top.isFull()) &&
+                !!(neighbors.bottom && neighbors.bottom.isFull()) &&
+                !!(neighbors.right  && neighbors.right.isFull()) &&
+                !!(neighbors.left   && neighbors.left.isFull());
 
-            if (chunk.visible === isOccluded) {
+            if (chunk.visible !== !isOccluded) {
                 chunk.visible = !isOccluded;
                 visibilityChanged = true;
             }

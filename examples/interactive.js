@@ -1,4 +1,4 @@
-import { Roxel, Noise, GameObject } from '../dist/roxel-engine.esm.js';
+import { Roxel, Noise, GameObject, PhysicsComponent, ColliderComponent, AABB, vec3 } from '../dist/roxel-engine.esm.js';
 import { PlayerController } from './components/PlayerController.js';
 
 // --- Engine and World Setup ---
@@ -21,8 +21,15 @@ engine.activeScene.world.noise = noise;
 
 // --- Player Setup ---
 const player = engine.createGameObject();
+vec3.set(player.position, 0, 15, 0);
 player.addComponent(new PlayerController());
+player.addComponent(new PhysicsComponent());
+player.addComponent(new ColliderComponent(new AABB(vec3.fromValues(-0.4, -1.8, -0.4), vec3.fromValues(0.4, 0, 0.4))));
 engine.addGameObject(player);
+
+// Disable physics for verification
+const physicsEngine = engine.getPhysicsEngine();
+physicsEngine.enabled = false;
 
 
 engine.start();

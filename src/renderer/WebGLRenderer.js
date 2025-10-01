@@ -97,20 +97,21 @@ export class WebGLRenderer {
         this.culling.updateFrustumPlanes(camera);
 
         const visibleChunks = this.getVisibleChunks(scene);
+        console.log(`Rendering ${visibleChunks.length} visible chunks.`);
 
         gl.bindVertexArray(this.vao);
         for (const chunk of visibleChunks) {
-            this.renderChunk(chunk, attributes);
+            this.renderChunk(chunk, attributes, scene.world);
         }
         gl.bindVertexArray(null);
     }
 
-    renderChunk(chunk, attributes) {
+    renderChunk(chunk, attributes, world) {
         const gl = this.gl;
         let renderData = chunk._renderDataCache;
 
         if (chunk.isDirty) {
-            renderData = chunk.generateRenderData();
+            renderData = chunk.generateRenderData(world);
             if (renderData) {
                 this.voxelBufferPool.updateBuffer(chunk, renderData);
             }

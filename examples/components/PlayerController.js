@@ -1,4 +1,4 @@
-import { Component, Vector3, CameraControlMode } from '../../dist/roxel-engine.esm.js';
+import { Component, Vector3, CameraControlMode, PhysicsComponent, vec3 } from '../../dist/roxel-engine.esm.js';
 
 export class PlayerController extends Component {
     constructor() {
@@ -6,6 +6,7 @@ export class PlayerController extends Component {
         this.camera = null;
         this.input = null;
         this.world = null;
+        this.physicsComponent = null;
     }
 
     start() {
@@ -13,11 +14,11 @@ export class PlayerController extends Component {
         this.camera.setControlMode(CameraControlMode.FREE);
         this.input = this.gameObject.engine.getInput();
         this.world = this.gameObject.engine.activeScene.world;
+        this.physicsComponent = this.gameObject.getComponent(PhysicsComponent);
     }
 
     update(deltaTime) {
         // Mouse look
-        console.log('update', this.input);
         const sensitivity = 0.005;
         if (document.pointerLockElement === this.gameObject.engine.canvas) {
             const mouseMotion = this.input.getMouseMotion();
@@ -41,31 +42,37 @@ export class PlayerController extends Component {
             }
         }
 
-        const moveSpeed = 5 * deltaTime;
+        const moveSpeed = 5;
+        const moveDirection = vec3.create();
 
         // Movement
         if (this.input.getKey('KeyW')) {
-            const forward = this.camera.getForwardVector();
-            this.camera.position.add(forward.multiplyScalar(moveSpeed));
+            const forward = this.camera.getForwardVectorGLM();
+            vec3.add(moveDirection, moveDirection, forward);
         }
         if (this.input.getKey('KeyS')) {
-            const forward = this.camera.getForwardVector();
-            this.camera.position.subtract(forward.multiplyScalar(moveSpeed));
+            const forward = this.camera.getForwardVectorGLM();
+            vec3.subtract(moveDirection, moveDirection, forward);
         }
         if (this.input.getKey('KeyA')) {
-            const right = this.camera.getRightVector();
-            this.camera.position.subtract(right.multiplyScalar(moveSpeed));
+            const right = this.camera.getRightVectorGLM();
+            vec3.subtract(moveDirection, moveDirection, right);
         }
         if (this.input.getKey('KeyD')) {
-            const right = this.camera.getRightVector();
-            this.camera.position.add(right.multiplyScalar(moveSpeed));
+            const right = this.camera.getRightVectorGLM();
+            vec3.add(moveDirection, moveDirection, right);
         }
+
+        vec3.normalize(moveDirection, moveDirection);
+        vec3.scale(this.physicsComponent.velocity, moveDirection, moveSpeed);
+
         if (this.input.getKey('Space')) {
-            this.camera.position.y += moveSpeed;
+            this.physicsComponent.velocity[1] = moveSpeed;
         }
-        if (this.input.getKey('ShiftLeft')) {
-            this.camera.position.y -= moveSpeed;
-        }
+    }
+
+    lateUpdate() {
+        this.camera.setPosition(this.gameObject.position[0], this.gameObject.position[1], this.gameObject.position[2]);
     }
 
     raycast(start, direction, maxDistance) {
