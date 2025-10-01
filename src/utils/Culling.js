@@ -48,42 +48,44 @@ export class Culling {
         this.frustumPlanes[21] = m[7] - m[6];
         this.frustumPlanes[22] = m[11] - m[10];
         this.frustumPlanes[23] = m[15] - m[14];
+
+        // Normalize planes (so distance checks are correct)
+        for (let p = 0; p < 6; p++) {
+            const i = p * 4;
+            const nx = this.frustumPlanes[i + 0];
+            const ny = this.frustumPlanes[i + 1];
+            const nz = this.frustumPlanes[i + 2];
+            const invLen = 1.0 / Math.hypot(nx, ny, nz);
+            this.frustumPlanes[i + 0] *= invLen;
+            this.frustumPlanes[i + 1] *= invLen;
+            this.frustumPlanes[i + 2] *= invLen;
+            this.frustumPlanes[i + 3] *= invLen;
+        }
     }
 
     isCulled(box) {
-        const corners = [
-            [box.min[0], box.min[1], box.min[2]],
-            [box.max[0], box.min[1], box.min[2]],
-            [box.min[0], box.max[1], box.min[2]],
-            [box.max[0], box.max[1], box.min[2]],
-            [box.min[0], box.min[1], box.max[2]],
-            [box.max[0], box.min[1], box.max[2]],
-            [box.min[0], box.max[1], box.max[2]],
-            [box.max[0], box.max[1], box.max[2]],
-        ];
+        // Use center/half-extent test against normalized planes (faster and robust)
+        const cx = (box.min[0] + box.max[0]) * 0.5;
+        const cy = (box.min[1] + box.max[1]) * 0.5;
+        const cz = (box.min[2] + box.max[2]) * 0.5;
+        const ex = (box.max[0] - box.min[0]) * 0.5;
+        const ey = (box.max[1] - box.min[1]) * 0.5;
+        const ez = (box.max[2] - box.min[2]) * 0.5;
 
-        // For each plane...
         for (let p = 0; p < 6; p++) {
-            let allCornersOutside = true;
-            // ...check if all corners are outside.
-            for (let c = 0; c < 8; c++) {
-                const distance =
-                    this.frustumPlanes[p * 4 + 0] * corners[c][0] +
-                    this.frustumPlanes[p * 4 + 1] * corners[c][1] +
-                    this.frustumPlanes[p * 4 + 2] * corners[c][2] +
-                    this.frustumPlanes[p * 4 + 3];
-                if (distance >= 0) {
-                    // This corner is inside or on the plane, so the box is not fully outside this plane.
-                    allCornersOutside = false;
-                    break;
-                }
-            }
-            if (allCornersOutside) {
-                // All corners were outside this plane, so the entire box is outside the frustum.
-                return true;
+            const i = p * 4;
+            const nx = this.frustumPlanes[i + 0];
+            const ny = this.frustumPlanes[i + 1];
+            const nz = this.frustumPlanes[i + 2];
+            const d = this.frustumPlanes[i + 3];
+
+            // Project half extents onto plane normal
+            const r = ex * Math.abs(nx) + ey * Math.abs(ny) + ez * Math.abs(nz);
+            const s = nx * cx + ny * cy + nz * cz + d;
+            if (s + r < 0) {
+                return true; // completely outside this plane
             }
         }
-
-        return false; // The box is at least partially inside the frustum.
+        return false;
     }
 }

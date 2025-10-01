@@ -37,7 +37,8 @@ export class WebGLRenderer {
             enableLighting: true,
             lightDirection: [0.5, -0.1, 0.5],
             lightColor: [1.0, 1.0, 1.0],
-            ambientStrength: 0.5
+            ambientStrength: 0.5,
+            disableCulling: false
         };
 
         this.wireframeMode = false;
@@ -97,7 +98,6 @@ export class WebGLRenderer {
         this.culling.updateFrustumPlanes(camera);
 
         const visibleChunks = this.getVisibleChunks(scene);
-        console.log(`Rendering ${visibleChunks.length} visible chunks.`);
 
         gl.bindVertexArray(this.vao);
         for (const chunk of visibleChunks) {
@@ -182,7 +182,8 @@ export class WebGLRenderer {
                 max: [(chunk.x + 1) * chunk.size, (chunk.y + 1) * chunk.size, (chunk.z + 1) * chunk.size]
             };
 
-            if (!this.culling.isCulled(box)) {
+            const culled = this.config.disableCulling ? false : this.culling.isCulled(box);
+            if (!culled) {
                 visible.push(chunk);
             }
         }

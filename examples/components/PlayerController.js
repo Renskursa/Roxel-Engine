@@ -63,12 +63,19 @@ export class PlayerController extends Component {
             vec3.add(moveDirection, moveDirection, right);
         }
 
-        vec3.normalize(moveDirection, moveDirection);
-        vec3.scale(this.physicsComponent.velocity, moveDirection, moveSpeed);
-
-        if (this.input.getKey('Space')) {
-            this.physicsComponent.velocity[1] = moveSpeed;
-        }
+		vec3.normalize(moveDirection, moveDirection);
+		// Safely apply movement: if a PhysicsComponent with a valid velocity vector exists,
+		// write into it; otherwise, move the GameObject position directly as a fallback.
+		if (this.physicsComponent && this.physicsComponent.velocity) {
+			vec3.scale(this.physicsComponent.velocity, moveDirection, moveSpeed);
+			if (this.input.getKey('Space')) {
+				this.physicsComponent.velocity[1] = moveSpeed;
+			}
+		} else {
+			const deltaMove = vec3.create();
+			vec3.scale(deltaMove, moveDirection, moveSpeed * deltaTime);
+			vec3.add(this.gameObject.position, this.gameObject.position, deltaMove);
+		}
     }
 
     lateUpdate() {

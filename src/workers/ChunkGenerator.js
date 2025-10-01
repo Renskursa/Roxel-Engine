@@ -12,6 +12,7 @@ self.onmessage = function(e) {
 
     // Reconstruct the generation function
     const generate = new Function('x', 'y', 'z', 'noise', `return (${generateFuncStr})(x, y, z, noise);`);
+    let solids = 0;
 
     const voxels = [];
     for (let localX = 0; localX < chunkSize; localX++) {
@@ -23,10 +24,10 @@ self.onmessage = function(e) {
                 const voxelType = generate(worldX, worldY, worldZ, noise);
                 if (voxelType > 0) {
                     voxels.push({ x: localX, y: localY, z: localZ, type: voxelType });
+                    solids++;
                 }
             }
         }
     }
-
     self.postMessage({ x, y, z, voxels });
 };

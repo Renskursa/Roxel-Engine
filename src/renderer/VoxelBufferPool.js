@@ -27,19 +27,19 @@ export class VoxelBufferPool {
         const buffers = this.getBuffer(chunk);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, renderData.vertices, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, renderData.vertices, gl.STATIC_DRAW);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, renderData.normals, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, renderData.normals, gl.STATIC_DRAW);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffers.colorBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, renderData.colors, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, renderData.colors, gl.STATIC_DRAW);
         
         gl.bindBuffer(gl.ARRAY_BUFFER, buffers.uvBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, renderData.uvs, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, renderData.uvs, gl.STATIC_DRAW);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, renderData.indices, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, renderData.indices, gl.STATIC_DRAW);
 
         buffers.elementCount = renderData.indices.length;
 

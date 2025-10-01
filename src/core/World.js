@@ -25,6 +25,8 @@ export class World {
         const key = `${x},${y},${z}`;
         this.chunkPool.set(key, chunk);
         this.isDirty = true;
+        // Update visibility only for this chunk and its neighbors
+        this.updateVisibilityFor(x, y, z);
     }
 
     getVoxel(x, y, z) {
@@ -65,6 +67,7 @@ export class World {
     updateVisibility() {
         let visibilityChanged = false;
         for (const chunk of this.chunkPool.values()) {
+            if (!chunk) continue;
             const neighbors = {
                 front:  this.getChunk(chunk.x, chunk.y, chunk.z + 1),
                 back:   this.getChunk(chunk.x, chunk.y, chunk.z - 1),
@@ -73,6 +76,9 @@ export class World {
                 right:  this.getChunk(chunk.x + 1, chunk.y, chunk.z),
                 left:   this.getChunk(chunk.x - 1, chunk.y, chunk.z)
             };
+
+            // Update per-voxel face visibility using neighbor information
+            chunk.updateVoxelVisibilityState(neighbors);
 
             const isOccluded =
                 !!(neighbors.front  && neighbors.front.isFull()) &&
@@ -90,5 +96,35 @@ export class World {
         if (visibilityChanged) {
             this.isDirty = true;
         }
+    }
+
+    // Optimized: update visibility for a specific chunk and its neighbors only
+    updateVisibilityFor(x, y, z) {
+        const positions = [
+            [x, y, z],
+            [x, y, z + 1],
+            [x, y, z - 1],
+            [x, y + 1, z],
+            [x, y - 1, z],
+            [x + 1, y, z],
+            [x - 1, y, z]
+        ];
+        let changed = false;
+        for (const [cx, cy, cz] of positions) {
+            const chunk = this.getChunk(cx, cy, cz);
+            if (!chunk) continue;
+            const neighbors = {
+                front:  this.getChunk(cx, cy, cz + 1),
+                back:   this.getChunk(cx, cy, cz - 1),
+                top:    this.getChunk(cx, cy + 1, cz),
+                bottom: this.getChunk(cx, cy - 1, cz),
+                right:  this.getChunk(cx + 1, cy, cz),
+                left:   this.getChunk(cx - 1, cy, cz)
+            };
+            chunk.updateVoxelVisibilityState(neighbors);
+            chunk.isDirty = true;
+            changed = true;
+        }
+        if (changed) this.isDirty = true;
     }
 }
