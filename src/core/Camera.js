@@ -1,3 +1,4 @@
+import { vec3 } from 'gl-matrix';
 import { Matrix4 } from '../datatypes/Matrix4.js';
 import { Vector3 } from '../datatypes/Vector3.js';
 
@@ -75,6 +76,19 @@ export class Camera {
         // Fix right vector calculation
         const forward = this.getForwardVector();
         return Vector3.cross(forward, this.up).normalize();
+    }
+
+    getForwardVectorGLM() {
+        return vec3.fromValues(this.forward.x, this.forward.y, this.forward.z);
+    }
+
+    getRightVectorGLM() {
+        const forward = this.getForwardVectorGLM();
+        const up = vec3.fromValues(this.up.x, this.up.y, this.up.z);
+        const right = vec3.create();
+        vec3.cross(right, forward, up);
+        vec3.normalize(right, right);
+        return right;
     }
 
     lookAt(x, y, z) {

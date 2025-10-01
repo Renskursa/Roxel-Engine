@@ -3,7 +3,7 @@ export { Roxel } from './core/Roxel.js';
 
 // Core Components
 export { Scene } from './scenes/Scene.js';
-export { Camera } from './core/Camera.js';
+export { Camera, CameraControlMode } from './core/Camera.js';
 export { World } from './core/World.js';
 export { Texture } from './core/Texture.js';
 
@@ -30,3 +30,15 @@ export { PLYLoader } from './loaders/PLYLoader.js';
 export { WebGLRenderer } from './renderer/WebGLRenderer.js';
 export { RenderableComponent } from './components/RenderableComponent.js';
 export { Sky } from './renderer/Sky.js';
+
+// Physics Components
+export { PhysicsEngine } from './core/PhysicsEngine.js';
+export { PhysicsComponent } from './components/PhysicsComponent.js';
+export { ColliderComponent } from './components/ColliderComponent.js';
+
+// Physics Shapes
+export { AABB } from './datatypes/shapes/AABB.js';
+export { Sphere } from './datatypes/shapes/Sphere.js';
+
+// GL-Matrix exports
+export { vec3 } from 'gl-matrix';

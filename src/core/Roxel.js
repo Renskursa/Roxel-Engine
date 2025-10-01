@@ -1,3 +1,4 @@
+import { vec3 } from 'gl-matrix';
 import { Input } from './Input.js';
 import { WebGLRenderer } from '../renderer/WebGLRenderer.js';
 import { Camera } from './Camera.js';
@@ -6,6 +7,7 @@ import { SceneLoader } from '../scenes/SceneLoader.js';
 import { Scene } from '../scenes/Scene.js';
 import { Component } from './Component.js';
 import { ChunkManager } from './ChunkManager.js';
+import { PhysicsEngine } from './PhysicsEngine.js';
 
 export class Roxel {
     #input;
@@ -15,6 +17,7 @@ export class Roxel {
     #focusManager;
     #sceneLoader;
     #chunkManager;
+    #physicsEngine;
 
     constructor(canvasId) {
         // Initialize core systems
@@ -57,6 +60,7 @@ export class Roxel {
             isManaged: false,
             isEnabled: false
         };
+        this.#physicsEngine = new PhysicsEngine();
     }
 
     #setupEventListeners() {
@@ -153,6 +157,7 @@ export class Roxel {
         
         while (this.#physicsTiming.getAccumulatedTime() >= this.#physicsTiming.targetFrameTime && 
                physicsIterations < 5) {
+            this.#physicsEngine.update(physicsScaledDelta);
             this.gameObjects.forEach(obj => {
                 obj.components.forEach(c => c.fixedUpdate?.(physicsScaledDelta));
             });
@@ -196,6 +201,7 @@ export class Roxel {
 
         gameObject.engine = this;
         this.gameObjects.add(gameObject);
+        this.#physicsEngine.addEntity(gameObject);
         if (this.isRunning) {
             gameObject.components.forEach(c => c.awake?.());
             gameObject.components.forEach(c => c.start?.());
@@ -209,6 +215,7 @@ export class Roxel {
     removeGameObject(gameObject) {
         gameObject.components.forEach(c => c.onDestroy?.());
         this.gameObjects.delete(gameObject);
+        this.#physicsEngine.removeEntity(gameObject);
         this.activeScene.remove(gameObject);
     }
 
@@ -438,6 +445,10 @@ export class Roxel {
         };
     }
 
+    getPhysicsEngine() {
+        return this.#physicsEngine;
+    }
+
     getFocusManager() {
         return {
             isEnabled: () => this.#focusManager.isEnabled,
@@ -484,9 +495,9 @@ export class Roxel {
 
 export class GameObject {
     constructor() {
-        this.position = { x: 0, y: 0, z: 0 };
-        this.rotation = { x: 0, y: 0, z: 0 };
-        this.scale = { x: 1, y: 1, z: 1 };
+        this.position = vec3.create();
+        this.rotation = vec3.create();
+        this.scale = vec3.fromValues(1, 1, 1);
         this.engine = null;
         this.components = [];
     }
@@ -505,8 +516,11 @@ export class GameObject {
         return component;
     }
 
-    getComponent(componentClass) {
-        return this.components.find(c => c instanceof componentClass);
+    getComponent(componentClassOrName) {
+        if (typeof componentClassOrName === 'string') {
+            return this.components.find(c => c.name === componentClassOrName);
+        }
+        return this.components.find(c => c instanceof componentClassOrName);
     }
 
     removeComponent(component) {
