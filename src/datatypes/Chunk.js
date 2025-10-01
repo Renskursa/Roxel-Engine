@@ -36,7 +36,14 @@ export class Chunk {
     }
 
     computeVoxelIndex(x, y, z) {
-        return x + (y * this.size) + (z * this.size * this.size);
+        // Corrected to z,y,x order to match worker and improve cache efficiency
+        return z * this.size * this.size + y * this.size + x;
+    }
+
+    buildFromWorkerData({ voxelTypes, voxelColors }) {
+        this.voxelTypes = new Uint8Array(voxelTypes);
+        this.voxelColors = new Float32Array(voxelColors);
+        this.isDirty = true;
     }
 
     storeVoxel(x, y, z, voxel) {
@@ -100,34 +107,36 @@ export class Chunk {
     }
 
     updateVoxelVisibilityState(neighborChunks = {}) {
-        for (let x = 0; x < this.size; x++) {
+        let i = 0;
+        for (let z = 0; z < this.size; z++) {
             for (let y = 0; y < this.size; y++) {
-                for (let z = 0; z < this.size; z++) {
-                    const index = this.computeVoxelIndex(x, y, z);
-                    if (this.voxelTypes[index] === 0) {
-                        this.voxelVisibility[index] = 0;
+                for (let x = 0; x < this.size; x++) {
+                    if (this.voxelTypes[i] === 0) {
+                        this.voxelVisibility[i] = 0;
+                        i++;
                         continue;
                     }
 
                     const neighbors = {
-                        front: z > 0 ? this.getVoxelType(x, y, z - 1) : neighborChunks.front?.getVoxelType(x, y, this.size - 1) || 0,
-                        back:  z < this.size - 1 ? this.getVoxelType(x, y, z + 1) : neighborChunks.back?.getVoxelType(x, y, 0) || 0,
-                        top:   y < this.size - 1 ? this.getVoxelType(x, y + 1, z) : neighborChunks.top?.getVoxelType(x, 0, z) || 0,
-                        bottom:y > 0 ? this.getVoxelType(x, y - 1, z) : neighborChunks.bottom?.getVoxelType(x, this.size - 1, z) || 0,
-                        right: x < this.size - 1 ? this.getVoxelType(x + 1, y, z) : neighborChunks.right?.getVoxelType(0, y, z) || 0,
-                        left:  x > 0 ? this.getVoxelType(x - 1, y, z) : neighborChunks.left?.getVoxelType(this.size - 1, y, z) || 0,
+                        front: z > 0 ? this.getVoxelType(x, y, z - 1) : (neighborChunks.front ? neighborChunks.front.getVoxelType(x, y, this.size - 1) : 0),
+                        back:  z < this.size - 1 ? this.getVoxelType(x, y, z + 1) : (neighborChunks.back ? neighborChunks.back.getVoxelType(x, y, 0) : 0),
+                        top:   y < this.size - 1 ? this.getVoxelType(x, y + 1, z) : (neighborChunks.top ? neighborChunks.top.getVoxelType(x, 0, z) : 0),
+                        bottom:y > 0 ? this.getVoxelType(x, y - 1, z) : (neighborChunks.bottom ? neighborChunks.bottom.getVoxelType(x, this.size - 1, z) : 0),
+                        right: x < this.size - 1 ? this.getVoxelType(x + 1, y, z) : (neighborChunks.right ? neighborChunks.right.getVoxelType(0, y, z) : 0),
+                        left:  x > 0 ? this.getVoxelType(x - 1, y, z) : (neighborChunks.left ? neighborChunks.left.getVoxelType(this.size - 1, y, z) : 0),
                     };
 
                     let flags = 0;
-                    flags |= (neighbors.front === 0 ? 1 : 0) << 0;
-                    flags |= (neighbors.back === 0 ? 1 : 0) << 1;
-                    flags |= (neighbors.top === 0 ? 1 : 0) << 2;
-                    flags |= (neighbors.bottom === 0 ? 1 : 0) << 3;
-                    flags |= (neighbors.right === 0 ? 1 : 0) << 4;
-                    flags |= (neighbors.left === 0 ? 1 : 0) << 5;
+                    if (!neighbors.front) flags |= 1 << 0;
+                    if (!neighbors.back) flags |= 1 << 1;
+                    if (!neighbors.top) flags |= 1 << 2;
+                    if (!neighbors.bottom) flags |= 1 << 3;
+                    if (!neighbors.right) flags |= 1 << 4;
+                    if (!neighbors.left) flags |= 1 << 5;
 
-                    this.voxelVisibility[index] = flags;
-                    this.voxelData[index] = (this.voxelData[index] & ~0xFF) | flags;
+                    this.voxelVisibility[i] = flags;
+                    this.voxelData[i] = (this.voxelData[i] & ~0xFF) | flags;
+                    i++;
                 }
             }
         }
@@ -175,15 +184,21 @@ export class Chunk {
         const indices = [];
         const colors = [];
         let vertexIndex = 0;
+        let i = 0;
 
-        for (let x = 0; x < this.size; x++) {
+        for (let z = 0; z < this.size; z++) {
             for (let y = 0; y < this.size; y++) {
-                for (let z = 0; z < this.size; z++) {
-                    const i = this.computeVoxelIndex(x, y, z);
-                    if (this.voxelTypes[i] === 0) continue;
+                for (let x = 0; x < this.size; x++) {
+                    if (this.voxelTypes[i] === 0) {
+                        i++;
+                        continue;
+                    }
 
                     const visibilityFlags = this.voxelVisibility[i];
-                    if (visibilityFlags === 0) continue;
+                    if (visibilityFlags === 0) {
+                        i++;
+                        continue;
+                    }
 
                     const worldX = this.x * this.size + x;
                     const worldY = this.y * this.size + y;
@@ -212,6 +227,7 @@ export class Chunk {
                             vertexIndex += face.vertices.length;
                         }
                     }
+                    i++;
                 }
             }
         }

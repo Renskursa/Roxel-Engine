@@ -69,8 +69,8 @@ export class World {
         for (const chunk of this.chunkPool.values()) {
             if (!chunk) continue;
             const neighbors = {
-                front:  this.getChunk(chunk.x, chunk.y, chunk.z + 1),
-                back:   this.getChunk(chunk.x, chunk.y, chunk.z - 1),
+                front:  this.getChunk(chunk.x, chunk.y, chunk.z - 1), // Front is -Z
+                back:   this.getChunk(chunk.x, chunk.y, chunk.z + 1), // Back is +Z
                 top:    this.getChunk(chunk.x, chunk.y + 1, chunk.z),
                 bottom: this.getChunk(chunk.x, chunk.y - 1, chunk.z),
                 right:  this.getChunk(chunk.x + 1, chunk.y, chunk.z),
@@ -114,8 +114,8 @@ export class World {
             const chunk = this.getChunk(cx, cy, cz);
             if (!chunk) continue;
             const neighbors = {
-                front:  this.getChunk(cx, cy, cz + 1),
-                back:   this.getChunk(cx, cy, cz - 1),
+                front:  this.getChunk(cx, cy, cz - 1), // Front is -Z
+                back:   this.getChunk(cx, cy, cz + 1), // Back is +Z
                 top:    this.getChunk(cx, cy + 1, cz),
                 bottom: this.getChunk(cx, cy - 1, cz),
                 right:  this.getChunk(cx + 1, cy, cz),

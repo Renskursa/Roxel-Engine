@@ -9,7 +9,7 @@ export const VoxelGeometry = {
                 { pos: [1, 0, 0], uv: [1, 0] },
                 { pos: [0, 0, 0], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
         // 1: back (+z)
         {
@@ -20,7 +20,7 @@ export const VoxelGeometry = {
                 { pos: [0, 0, 1], uv: [1, 0] },
                 { pos: [1, 0, 1], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
         // 2: top (+y)
         {
@@ -31,7 +31,7 @@ export const VoxelGeometry = {
                 { pos: [1, 1, 0], uv: [1, 0] },
                 { pos: [0, 1, 0], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
         // 3: bottom (-y)
         {
@@ -42,7 +42,7 @@ export const VoxelGeometry = {
                 { pos: [1, 0, 1], uv: [1, 0] },
                 { pos: [0, 0, 1], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
         // 4: right (+x)
         {
@@ -53,7 +53,7 @@ export const VoxelGeometry = {
                 { pos: [1, 0, 1], uv: [1, 0] },
                 { pos: [1, 0, 0], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
         // 5: left (-x)
         {
@@ -64,7 +64,7 @@ export const VoxelGeometry = {
                 { pos: [0, 0, 0], uv: [1, 0] },
                 { pos: [0, 0, 1], uv: [0, 0] },
             ],
-            indices: [0, 1, 2, 0, 2, 3]
+            indices: [0, 2, 1, 0, 3, 2]
         },
     ]
 };
