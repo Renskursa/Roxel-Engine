@@ -1,5 +1,6 @@
 import { Voxel } from './Voxel.js';
 import { Color } from '../utils/ColorUtils.js';
+import { VoxelGeometry } from '../renderer/VoxelGeometry.js';
 
 /**
  * Represents a chunk of voxels in 3D space
@@ -91,50 +92,46 @@ export class Chunk {
                z >= 0 && z < this.size;
     }
 
+    getVoxelType(x, y, z) {
+        if (!this.isPositionInBounds(x, y, z)) {
+            return 0; // Air
+        }
+        return this.voxelTypes[this.computeVoxelIndex(x, y, z)];
+    }
+
     updateVoxelVisibilityState(neighborChunks = {}) {
         for (let x = 0; x < this.size; x++) {
             for (let y = 0; y < this.size; y++) {
                 for (let z = 0; z < this.size; z++) {
                     const index = this.computeVoxelIndex(x, y, z);
-                    if (this.voxelTypes[index] === 0) continue;
+                    if (this.voxelTypes[index] === 0) {
+                        this.voxelVisibility[index] = 0;
+                        continue;
+                    }
 
-                    const neighbors = this.getNeighboringVoxels(x, y, z, neighborChunks);
-                    const visibilityFlags = this.computeVisibilityFlags(neighbors);
-                    this.voxelVisibility[index] = visibilityFlags;
-                    this.voxelData[index] = (this.voxelData[index] & ~0xFF) | visibilityFlags;
+                    const neighbors = {
+                        front: z > 0 ? this.getVoxelType(x, y, z - 1) : neighborChunks.front?.getVoxelType(x, y, this.size - 1) || 0,
+                        back:  z < this.size - 1 ? this.getVoxelType(x, y, z + 1) : neighborChunks.back?.getVoxelType(x, y, 0) || 0,
+                        top:   y < this.size - 1 ? this.getVoxelType(x, y + 1, z) : neighborChunks.top?.getVoxelType(x, 0, z) || 0,
+                        bottom:y > 0 ? this.getVoxelType(x, y - 1, z) : neighborChunks.bottom?.getVoxelType(x, this.size - 1, z) || 0,
+                        right: x < this.size - 1 ? this.getVoxelType(x + 1, y, z) : neighborChunks.right?.getVoxelType(0, y, z) || 0,
+                        left:  x > 0 ? this.getVoxelType(x - 1, y, z) : neighborChunks.left?.getVoxelType(this.size - 1, y, z) || 0,
+                    };
+
+                    let flags = 0;
+                    flags |= (neighbors.front === 0 ? 1 : 0) << 0;
+                    flags |= (neighbors.back === 0 ? 1 : 0) << 1;
+                    flags |= (neighbors.top === 0 ? 1 : 0) << 2;
+                    flags |= (neighbors.bottom === 0 ? 1 : 0) << 3;
+                    flags |= (neighbors.right === 0 ? 1 : 0) << 4;
+                    flags |= (neighbors.left === 0 ? 1 : 0) << 5;
+
+                    this.voxelVisibility[index] = flags;
+                    this.voxelData[index] = (this.voxelData[index] & ~0xFF) | flags;
                 }
             }
         }
         this.isDirty = true;
-    }
-
-    getNeighboringVoxels(x, y, z, neighborChunks) {
-        // Helper method to get neighboring voxels
-        return {
-            front: z > 0 ? this.getVoxelAt(x, y, z - 1) : 
-                   (neighborChunks.front?.getVoxelAt(x, y, this.size - 1)),
-            back: z < this.size - 1 ? this.getVoxelAt(x, y, z + 1) : 
-                  (neighborChunks.back?.getVoxelAt(x, y, 0)),
-            top: y < this.size - 1 ? this.getVoxelAt(x, y + 1, z) : 
-                 (neighborChunks.top?.getVoxelAt(x, 0, z)),
-            bottom: y > 0 ? this.getVoxelAt(x, y - 1, z) : 
-                    (neighborChunks.bottom?.getVoxelAt(x, this.size - 1, z)),
-            right: x < this.size - 1 ? this.getVoxelAt(x + 1, y, z) : 
-                   (neighborChunks.right?.getVoxelAt(0, y, z)),
-            left: x > 0 ? this.getVoxelAt(x - 1, y, z) : 
-                  (neighborChunks.left?.getVoxelAt(this.size - 1, y, z))
-        };
-    }
-
-    computeVisibilityFlags(neighbors) {
-        let flags = 0;
-        flags |= (!neighbors.front?.isSolid() ? 1 : 0) << 0;
-        flags |= (!neighbors.back?.isSolid() ? 1 : 0) << 1;
-        flags |= (!neighbors.top?.isSolid() ? 1 : 0) << 2;
-        flags |= (!neighbors.bottom?.isSolid() ? 1 : 0) << 3;
-        flags |= (!neighbors.right?.isSolid() ? 1 : 0) << 4;
-        flags |= (!neighbors.left?.isSolid() ? 1 : 0) << 5;
-        return flags;
     }
 
     // Add serialization methods for chunk data
@@ -167,34 +164,71 @@ export class Chunk {
         return voxel;
     }
 
-    iterateVoxels(callback) {
-        for(let x = 0; x < this.size; x++) {
-            for(let y = 0; y < this.size; y++) {
-                for(let z = 0; z < this.size; z++) {
-                    const voxel = this.getVoxelAt(x, y, z);
-                    if (voxel) callback(voxel, x, y, z);
-                }
-            }
-        }
-    }
-
     generateRenderData() {
         if (!this.isDirty && this._renderDataCache) {
             return this._renderDataCache;
         }
 
-        const instances = [];
-        this.iterateVoxels((voxel) => {
-            if (voxel.visible && voxel.type > 0) {
-                instances.push({
-                    position: [voxel.x, voxel.y, voxel.z],
-                    color: voxel.getColor(),
-                    ao: 1.0, // Placeholder for ambient occlusion
-                });
-            }
-        });
+        const vertices = [];
+        const normals = [];
+        const uvs = [];
+        const indices = [];
+        const colors = [];
+        let vertexIndex = 0;
 
-        this._renderDataCache = { instances };
+        for (let x = 0; x < this.size; x++) {
+            for (let y = 0; y < this.size; y++) {
+                for (let z = 0; z < this.size; z++) {
+                    const i = this.computeVoxelIndex(x, y, z);
+                    if (this.voxelTypes[i] === 0) continue;
+
+                    const visibilityFlags = this.voxelVisibility[i];
+                    if (visibilityFlags === 0) continue;
+
+                    const worldX = this.x * this.size + x;
+                    const worldY = this.y * this.size + y;
+                    const worldZ = this.z * this.size + z;
+
+                    const colorIndex = i * 4;
+                    const r = this.voxelColors[colorIndex];
+                    const g = this.voxelColors[colorIndex + 1];
+                    const b = this.voxelColors[colorIndex + 2];
+                    const a = this.voxelColors[colorIndex + 3];
+
+                    for (let faceIndex = 0; faceIndex < 6; faceIndex++) {
+                        if ((visibilityFlags & (1 << faceIndex)) !== 0) {
+                            const face = VoxelGeometry.faces[faceIndex];
+
+                            for (const vert of face.vertices) {
+                                vertices.push(vert.pos[0] + worldX, vert.pos[1] + worldY, vert.pos[2] + worldZ);
+                                normals.push(...face.normal);
+                                uvs.push(...vert.uv);
+                                colors.push(r, g, b, a);
+                            }
+
+                            for (const idx of face.indices) {
+                                indices.push(vertexIndex + idx);
+                            }
+                            vertexIndex += face.vertices.length;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (vertices.length === 0) {
+            this._renderDataCache = null;
+            this.isDirty = false;
+            return null;
+        }
+
+        this._renderDataCache = {
+            vertices: new Float32Array(vertices),
+            normals: new Float32Array(normals),
+            uvs: new Float32Array(uvs),
+            indices: new Uint32Array(indices),
+            colors: new Float32Array(colors)
+        };
         this.isDirty = false;
         return this._renderDataCache;
     }
