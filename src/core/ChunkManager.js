@@ -6,10 +6,9 @@ export class ChunkManager {
         this.world = world;
         this.scene = scene;
         this.worker = new Worker('/src/workers/ChunkGenerator.js', { type: 'module' });
-        this.chunkLoadDistance = 4; // Horizontal distance
-        this.chunkLoadDistanceVertical = 1; // Vertical distance
+        this.chunkLoadDistance = 4;
         this.lastChunkUpdate = 0;
-        this.chunkUpdateInterval = 250; // ms
+        this.chunkUpdateInterval = 100;
 
         this.worker.onmessage = (e) => {
             const { x, y, z, voxels } = e.data;
@@ -34,7 +33,7 @@ export class ChunkManager {
 
         const requiredChunks = new Set();
         for (let x = cameraChunkX - this.chunkLoadDistance; x <= cameraChunkX + this.chunkLoadDistance; x++) {
-            for (let y = cameraChunkY - this.chunkLoadDistanceVertical; y <= cameraChunkY + this.chunkLoadDistanceVertical; y++) {
+            for (let y = cameraChunkY - this.chunkLoadDistance; y <= cameraChunkY + this.chunkLoadDistance; y++) {
                 for (let z = cameraChunkZ - this.chunkLoadDistance; z <= cameraChunkZ + this.chunkLoadDistance; z++) {
                     requiredChunks.add(`${x},${y},${z}`);
                 }
